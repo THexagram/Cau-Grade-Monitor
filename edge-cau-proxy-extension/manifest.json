@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "CAU NJUConnect Proxy",
+  "version": "1.0.0",
+  "description": "Route CAU newjw traffic through local NJUConnect SOCKS5 proxy.",
+  "permissions": [
+    "proxy",
+    "storage"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
+}

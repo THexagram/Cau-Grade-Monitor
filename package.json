@@ -1,0 +1,19 @@
+{
+  "name": "cau-grade-feishu-monitor",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CAU grade monitor with Feishu bot notifications",
+  "main": "monitor.js",
+  "scripts": {
+    "start": "node monitor.js",
+    "once": "node monitor.js --once",
+    "test-feishu": "node monitor.js --test-feishu",
+    "check": "node --check monitor.js"
+  },
+  "dependencies": {
+    "playwright-core": "^1.55.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

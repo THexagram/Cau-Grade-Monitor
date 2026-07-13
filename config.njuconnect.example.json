@@ -1,0 +1,64 @@
+{
+  "manualLogin": true,
+  "loginUrl": "https://one.cau.edu.cn/tp_up/view?m=up#act=portal/viewhome",
+  "gradeUrl": "https://newjw.cau.edu.cn/jsxsd/kscj/cjcx_frm",
+  "listUrl": "https://newjw.cau.edu.cn/jsxsd/kscj/cjcx_list",
+  "term": "auto",
+  "intervalSeconds": 60,
+  "initialLoginRetrySeconds": 10,
+  "errorNotifyCooldownSeconds": 1800,
+  "emptyResultNotifyAfter": 3,
+  "emptyResultRetrySeconds": 60,
+  "requestTimeoutMs": 30000,
+  "logging": {
+    "noChangeEverySeconds": 1800,
+    "loginNeededEverySeconds": 300
+  },
+  "stateFile": "state.json",
+  "proxy": {
+    "enabled": true,
+    "server": "socks5://127.0.0.1:1080",
+    "browser": false,
+    "bypass": "localhost,127.0.0.1,one.cau.edu.cn,onecas.cau.edu.cn,wep.cau.edu.cn,jx.cau.edu.cn,imrobot.cau.edu.cn"
+  },
+  "browser": {
+    "channel": "msedge",
+    "executablePath": "",
+    "lowResourceMode": true,
+    "closeExtraPages": true,
+    "maxScanPages": 6,
+    "blockResourcesAfterFirstSuccess": true,
+    "blockResourceTypes": [
+      "image",
+      "media",
+      "font"
+    ],
+    "headless": false,
+    "userDataDir": "browser-profile",
+    "proxyPacFile": "",
+    "loadExtensionDir": "edge-cau-proxy-extension",
+    "args": [
+      "--host-resolver-rules=MAP newjw.cau.edu.cn 10.200.36.235,EXCLUDE localhost",
+      "--disable-background-networking",
+      "--disable-component-update",
+      "--disable-default-apps",
+      "--disable-domain-reliability",
+      "--disable-client-side-phishing-detection",
+      "--disable-sync",
+      "--metrics-recording-only",
+      "--no-first-run",
+      "--no-default-browser-check",
+      "--safebrowsing-disable-auto-update"
+    ],
+    "viewport": {
+      "width": 1100,
+      "height": 720
+    }
+  },
+  "feishu": {
+    "webhookEnv": "FEISHU_WEBHOOK_URL",
+    "secretEnv": "FEISHU_BOT_SECRET",
+    "atAll": false,
+    "notifyOnStart": true
+  }
+}

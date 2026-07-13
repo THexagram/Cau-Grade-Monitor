@@ -1,0 +1,48 @@
+{
+  "manualLogin": true,
+  "loginUrl": "https://one.cau.edu.cn/tp_up/view?m=up#act=portal/viewhome",
+  "gradeUrl": "https://newjw.cau.edu.cn/jsxsd/kscj/cjcx_frm",
+  "listUrl": "https://newjw.cau.edu.cn/jsxsd/kscj/cjcx_list",
+  "term": "auto",
+  "intervalSeconds": 60,
+  "initialLoginRetrySeconds": 10,
+  "errorNotifyCooldownSeconds": 1800,
+  "emptyResultNotifyAfter": 3,
+  "emptyResultRetrySeconds": 60,
+  "requestTimeoutMs": 30000,
+  "logging": {
+    "noChangeEverySeconds": 1800,
+    "loginNeededEverySeconds": 300
+  },
+  "stateFile": "state.json",
+  "proxy": {
+    "enabled": false,
+    "server": "",
+    "bypass": "localhost,127.0.0.1"
+  },
+  "browser": {
+    "channel": "msedge",
+    "executablePath": "",
+    "lowResourceMode": true,
+    "closeExtraPages": true,
+    "maxScanPages": 6,
+    "blockResourcesAfterFirstSuccess": true,
+    "blockResourceTypes": [
+      "image",
+      "media",
+      "font"
+    ],
+    "headless": false,
+    "userDataDir": "browser-profile",
+    "viewport": {
+      "width": 1100,
+      "height": 720
+    }
+  },
+  "feishu": {
+    "webhookEnv": "FEISHU_WEBHOOK_URL",
+    "secretEnv": "FEISHU_BOT_SECRET",
+    "atAll": false,
+    "notifyOnStart": true
+  }
+}
