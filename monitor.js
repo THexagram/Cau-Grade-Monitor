@@ -663,7 +663,7 @@ async function launchBrowser(config) {
     launchOptions.proxy = proxy;
     log(`Browser proxy enabled: ${displayProxyServer(proxy.server)}`);
   } else if (proxy) {
-    log(`Browser proxy disabled; proxy remains available for keepalive: ${displayProxyServer(proxy.server)}`);
+    log(`Browser launch proxy disabled; configured SOCKS5 endpoint: ${displayProxyServer(proxy.server)}`);
   }
 
   fs.mkdirSync(config.browser.userDataDir, { recursive: true });

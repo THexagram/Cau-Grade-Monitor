@@ -20,6 +20,7 @@ public sealed class ProcessSupervisor : IAsyncDisposable
     private string? _vpnExecutable;
     private DateTimeOffset? _vpnConnectedAt;
     private DateTimeOffset? _lastCheckAt;
+    private TaskCompletionSource<bool>? _vpnReadySignal;
     private int _eofFailureCount;
     private int _vpnRestartRequested;
     private bool _stopping;
@@ -159,7 +160,7 @@ public sealed class ProcessSupervisor : IAsyncDisposable
     private async Task EnsureSocksPortAvailableAsync(AppSettings settings, CancellationToken cancellationToken)
     {
         var (host, port) = ParseHostPort(settings.SocksBind);
-        if (!await IsPortOpenAsync(host, port, TimeSpan.FromMilliseconds(500), cancellationToken)) return;
+        if (!await CanConnectTcpAsync(host, port, TimeSpan.FromMilliseconds(500), cancellationToken)) return;
 
         var easierConnectProcesses = Process.GetProcessesByName("EasierConnect");
         foreach (var process in easierConnectProcesses)
@@ -181,7 +182,7 @@ public sealed class ProcessSupervisor : IAsyncDisposable
 
         for (var attempt = 0; attempt < 20; attempt += 1)
         {
-            if (!await IsPortOpenAsync(host, port, TimeSpan.FromMilliseconds(300), cancellationToken)) return;
+            if (!await CanConnectTcpAsync(host, port, TimeSpan.FromMilliseconds(300), cancellationToken)) return;
             await Task.Delay(500, cancellationToken);
         }
         throw new InvalidOperationException($"SOCKS5 端口 {settings.SocksBind} 已被其他程序占用。");
@@ -192,6 +193,8 @@ public sealed class ProcessSupervisor : IAsyncDisposable
         var settings = _settings!;
         Interlocked.Exchange(ref _eofFailureCount, 0);
         Interlocked.Exchange(ref _vpnRestartRequested, 0);
+        var readySignal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _vpnReadySignal = readySignal;
 
         var startInfo = new ProcessStartInfo
         {
@@ -217,22 +220,28 @@ public sealed class ProcessSupervisor : IAsyncDisposable
         _vpnProcess.BeginErrorReadLine();
         WriteLog("VPN", "正在建立新会话。", ServicePhase.Starting);
 
-        var (host, port) = ParseHostPort(settings.SocksBind);
         var deadline = DateTimeOffset.Now.AddSeconds(60);
-        while (DateTimeOffset.Now < deadline)
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (_vpnProcess.HasExited) throw new InvalidOperationException($"EasierConnect 已退出，代码 {_vpnProcess.ExitCode}。");
-            if (await IsPortOpenAsync(host, port, TimeSpan.FromSeconds(1), cancellationToken))
+            while (DateTimeOffset.Now < deadline)
             {
-                _vpnConnectedAt = DateTimeOffset.Now;
-                UpdateStatus(ServicePhase.Running, "已连接", Status.MonitorPhase, Status.MonitorText);
-                WriteLog("VPN", $"SOCKS5 已就绪：{settings.SocksBind}", ServicePhase.Running);
-                return;
+                cancellationToken.ThrowIfCancellationRequested();
+                if (_vpnProcess.HasExited) throw new InvalidOperationException($"EasierConnect 已退出，代码 {_vpnProcess.ExitCode}。");
+                if (readySignal.Task.IsCompletedSuccessfully)
+                {
+                    _vpnConnectedAt = DateTimeOffset.Now;
+                    UpdateStatus(ServicePhase.Running, "已连接", Status.MonitorPhase, Status.MonitorText);
+                    WriteLog("VPN", $"SOCKS5 已就绪：{settings.SocksBind}", ServicePhase.Running);
+                    return;
+                }
+                await Task.Delay(250, cancellationToken);
             }
-            await Task.Delay(1000, cancellationToken);
+            throw new TimeoutException("等待 VPN SOCKS5 服务启动超时。");
         }
-        throw new TimeoutException("等待 VPN SOCKS5 端口超时。");
+        finally
+        {
+            if (ReferenceEquals(_vpnReadySignal, readySignal)) _vpnReadySignal = null;
+        }
     }
 
     private async Task StartMonitorAsync(CancellationToken cancellationToken)
@@ -272,7 +281,6 @@ public sealed class ProcessSupervisor : IAsyncDisposable
     private async Task SuperviseAsync(CancellationToken cancellationToken)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
-        var nextPortCheck = DateTimeOffset.Now;
         while (await timer.WaitForNextTickAsync(cancellationToken))
         {
             try
@@ -294,17 +302,6 @@ public sealed class ProcessSupervisor : IAsyncDisposable
                 {
                     await RestartVpnAsync($"达到 {_settings.VpnRestartMinutes} 分钟会话轮换时间", cancellationToken);
                     continue;
-                }
-
-                if (DateTimeOffset.Now >= nextPortCheck)
-                {
-                    nextPortCheck = DateTimeOffset.Now.AddSeconds(30);
-                    var (host, port) = ParseHostPort(_settings.SocksBind);
-                    if (!await IsPortOpenAsync(host, port, TimeSpan.FromSeconds(1), cancellationToken))
-                    {
-                        await RestartVpnAsync("SOCKS5 端口不可用", cancellationToken);
-                        continue;
-                    }
                 }
 
                 if (_monitorProcess is null || _monitorProcess.HasExited)
@@ -342,6 +339,10 @@ public sealed class ProcessSupervisor : IAsyncDisposable
     private void HandleVpnOutput(string? line)
     {
         if (string.IsNullOrWhiteSpace(line) || _stopping) return;
+        if (line.Contains("SOCKS5 SERVER listening on", StringComparison.OrdinalIgnoreCase))
+        {
+            _vpnReadySignal?.TrySetResult(true);
+        }
         if (line.Contains("Error occurred while", StringComparison.OrdinalIgnoreCase) &&
             line.Contains("EOF", StringComparison.OrdinalIgnoreCase))
         {
@@ -470,7 +471,7 @@ public sealed class ProcessSupervisor : IAsyncDisposable
         return (value[..separator], port);
     }
 
-    private static async Task<bool> IsPortOpenAsync(string host, int port, TimeSpan timeout, CancellationToken cancellationToken)
+    private static async Task<bool> CanConnectTcpAsync(string host, int port, TimeSpan timeout, CancellationToken cancellationToken)
     {
         using var client = new TcpClient();
         try
@@ -486,6 +487,7 @@ public sealed class ProcessSupervisor : IAsyncDisposable
 
     private static string? SanitizeVpnLine(string line)
     {
+        if (line.Contains("client connection failed: could not read packet header", StringComparison.OrdinalIgnoreCase)) return null;
         if (line.Contains("Password to encrypt", StringComparison.OrdinalIgnoreCase)) return "正在准备加密登录信息。";
         if (line.Contains("Encrypted Password", StringComparison.OrdinalIgnoreCase)) return "登录信息已加密。";
         if (line.Contains("RSA Key", StringComparison.OrdinalIgnoreCase)) return null;
