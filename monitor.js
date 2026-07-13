@@ -159,6 +159,12 @@ function loadConfig(configPath) {
   config.gpa.selectedTypes = Array.isArray(config.gpa.selectedTypes)
     ? [...new Set(config.gpa.selectedTypes.map(normalize).filter(Boolean))]
     : [];
+  config.gpa.includedCourseKeys = Array.isArray(config.gpa.includedCourseKeys)
+    ? [...new Set(config.gpa.includedCourseKeys.map((key) => String(key || '').trim()).filter(Boolean))]
+    : [];
+  config.gpa.excludedCourseKeys = Array.isArray(config.gpa.excludedCourseKeys)
+    ? [...new Set(config.gpa.excludedCourseKeys.map((key) => String(key || '').trim()).filter(Boolean))]
+    : [];
   config.stateFile = resolvePathMaybe(base, config.stateFile || 'state.json');
   config.guiSnapshotFile = resolvePathMaybe(base, config.guiSnapshotFile || 'gui-snapshot.json');
   config.browser = config.browser || {};
@@ -322,7 +328,7 @@ function courseTypeForRow(row) {
   return normalize(row.type || row.property || row.group || row.category || row.nature) || '未分类';
 }
 
-function isIncludedGpaRow(row, scope = 'required_and_sports', selectedTypes = null) {
+function isIncludedByBaseGpaRule(row, scope = 'required_and_sports', selectedTypes = null) {
   if (Array.isArray(selectedTypes)) return selectedTypes.includes(courseTypeForRow(row));
   if (scope === 'all') return true;
   const markers = [row.type, row.property, row.nature, row.category, row.group];
@@ -333,18 +339,25 @@ function isIncludedGpaRow(row, scope = 'required_and_sports', selectedTypes = nu
   return Array.isArray(row.raw) && row.raw.some(isIncluded);
 }
 
+function isIncludedGpaRow(row, scope = 'required_and_sports', selectedTypes = null, courseOverrides = null) {
+  const key = rowKey(row);
+  if (courseOverrides?.excluded?.includes(key)) return false;
+  if (courseOverrides?.included?.includes(key)) return true;
+  return isIncludedByBaseGpaRule(row, scope, selectedTypes);
+}
+
 function formatGpa(gpa) {
   return gpa === null ? '暂无可计算绩点' : gpa.toFixed(2);
 }
 
-function calculateRequiredGpa(rows, scope = 'required_and_sports', selectedTypes = null) {
+function calculateRequiredGpa(rows, scope = 'required_and_sports', selectedTypes = null, courseOverrides = null) {
   let weightedPoints = 0;
   let totalCredits = 0;
   let counted = 0;
   let required = 0;
 
   for (const row of rows) {
-    if (!isIncludedGpaRow(row, scope, selectedTypes)) continue;
+    if (!isIncludedGpaRow(row, scope, selectedTypes, courseOverrides)) continue;
     required += 1;
     const credit = parseCredit(row.credit);
     const gradePoint = gradePointForScore(row.score);
@@ -364,17 +377,23 @@ function calculateRequiredGpa(rows, scope = 'required_and_sports', selectedTypes
   };
 }
 
-function buildGuiCourses(rows, scope, selectedTypes = null) {
-  return rows.map((row) => ({
-    term: row.term || '',
-    code: row.code || '',
-    name: row.name || '',
-    credit: row.credit || '',
-    score: row.score || '',
-    type: courseTypeForRow(row),
-    includedInGpa: isIncludedGpaRow(row, scope, selectedTypes) &&
-      parseCredit(row.credit) !== null && gradePointForScore(row.score) !== null
-  }));
+function buildGuiCourses(rows, scope, selectedTypes = null, courseOverrides = null) {
+  return rows.map((row) => {
+    const gpaEligible = parseCredit(row.credit) !== null && gradePointForScore(row.score) !== null;
+    const baseIncludedInGpa = isIncludedByBaseGpaRule(row, scope, selectedTypes) && gpaEligible;
+    return {
+      key: rowKey(row),
+      term: row.term || '',
+      code: row.code || '',
+      name: row.name || '',
+      credit: row.credit || '',
+      score: row.score || '',
+      type: courseTypeForRow(row),
+      baseIncludedInGpa,
+      includedInGpa: isIncludedGpaRow(row, scope, selectedTypes, courseOverrides) && gpaEligible,
+      gpaEligible
+    };
+  });
 }
 
 function formatStartupSummary(rows, gpaInfo) {
@@ -855,10 +874,14 @@ async function runMonitor(config, options) {
       await closeExtraPages(context, page, config);
 
       const selectedTypes = config.gpa.useSelectedTypes ? config.gpa.selectedTypes : null;
+      const courseOverrides = {
+        included: config.gpa.includedCourseKeys,
+        excluded: config.gpa.excludedCourseKeys
+      };
       const effectiveGpaScope = selectedTypes ? 'selected_types' : config.gpa.scope;
-      const gpaInfo = calculateRequiredGpa(rows, config.gpa.scope, selectedTypes);
+      const gpaInfo = calculateRequiredGpa(rows, config.gpa.scope, selectedTypes, courseOverrides);
       const startupSummary = formatStartupSummary(rows, gpaInfo);
-      const guiCourses = buildGuiCourses(rows, config.gpa.scope, selectedTypes);
+      const guiCourses = buildGuiCourses(rows, config.gpa.scope, selectedTypes, courseOverrides);
       let courseSnapshotWritten = false;
       try {
         writeJsonAtomic(config.guiSnapshotFile, {

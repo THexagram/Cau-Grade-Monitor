@@ -17,7 +17,9 @@
   "gpa": {
     "scope": "required_and_sports",
     "useSelectedTypes": false,
-    "selectedTypes": []
+    "selectedTypes": [],
+    "includedCourseKeys": [],
+    "excludedCourseKeys": []
   },
   "stateFile": "state.json",
   "guiSnapshotFile": "gui-snapshot.json",

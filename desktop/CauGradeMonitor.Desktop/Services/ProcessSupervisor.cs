@@ -488,14 +488,24 @@ public sealed class ProcessSupervisor : IAsyncDisposable
         var courses = new List<GradeCourse>();
         foreach (var course in courseElements.EnumerateArray())
         {
+            var term = ReadJsonString(course, "term");
+            var code = ReadJsonString(course, "code");
+            var name = ReadJsonString(course, "name");
+            var credit = ReadJsonString(course, "credit");
+            var includedInGpa = course.TryGetProperty("includedInGpa", out var included) && included.ValueKind == JsonValueKind.True;
             courses.Add(new GradeCourse(
-                ReadJsonString(course, "term"),
-                ReadJsonString(course, "code"),
-                ReadJsonString(course, "name"),
-                ReadJsonString(course, "credit"),
+                term,
+                code,
+                name,
+                credit,
                 ReadJsonString(course, "score"),
                 ReadJsonString(course, "type"),
-                course.TryGetProperty("includedInGpa", out var included) && included.ValueKind == JsonValueKind.True));
+                includedInGpa,
+                !course.TryGetProperty("gpaEligible", out var eligible) || eligible.ValueKind == JsonValueKind.True,
+                ReadJsonString(course, "key", string.Join("||", term, code, name, credit)),
+                course.TryGetProperty("baseIncludedInGpa", out var baseIncluded)
+                    ? baseIncluded.ValueKind == JsonValueKind.True
+                    : includedInGpa));
         }
         return courses;
     }

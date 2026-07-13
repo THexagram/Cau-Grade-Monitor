@@ -24,7 +24,10 @@ public sealed record GradeCourse(
     string Credit,
     string Score,
     string Type,
-    bool IncludedInGpa);
+    bool IncludedInGpa,
+    bool GpaEligible = true,
+    string Key = "",
+    bool BaseIncludedInGpa = false);
 
 public sealed record GradeSnapshot(
     int Rows,

@@ -18,6 +18,9 @@ public partial class MainWindow : Window
     private readonly List<string> _logLines = [];
     private readonly List<string> _availableGpaTypes = [];
     private readonly HashSet<string> _selectedGpaTypes = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _includedCourseKeys = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _excludedCourseKeys = new(StringComparer.Ordinal);
+    private List<GradeCourse> _latestCourses = [];
     private AppSettings _settings = new();
     private Forms.NotifyIcon? _trayIcon;
     private bool _allowClose;
@@ -263,6 +266,16 @@ public partial class MainWindow : Window
         {
             if (!string.IsNullOrWhiteSpace(type)) _selectedGpaTypes.Add(type.Trim());
         }
+        _includedCourseKeys.Clear();
+        foreach (var key in settings.GpaIncludedCourseKeys ?? [])
+        {
+            if (!string.IsNullOrWhiteSpace(key)) _includedCourseKeys.Add(key.Trim());
+        }
+        _excludedCourseKeys.Clear();
+        foreach (var key in settings.GpaExcludedCourseKeys ?? [])
+        {
+            if (!string.IsNullOrWhiteSpace(key)) _excludedCourseKeys.Add(key.Trim());
+        }
         RefreshGpaTypeSelector();
         GpaScopeMetricLabel.Text = _gpaTypesConfigured
             ? SelectedTypesLabel(_selectedGpaTypes)
@@ -282,7 +295,7 @@ public partial class MainWindow : Window
 
     private AppSettings ReadSettingsFromForm()
     {
-        var selectedTypesConfigured = _gpaTypesConfigured || _availableGpaTypes.Count > 0;
+        var selectedTypesConfigured = _gpaTypesConfigured;
         _gpaTypesConfigured = selectedTypesConfigured;
         var settings = new AppSettings
         {
@@ -302,6 +315,8 @@ public partial class MainWindow : Window
             GpaScope = string.IsNullOrWhiteSpace(_settings.GpaScope) ? "required_and_sports" : _settings.GpaScope,
             GpaSelectedTypesConfigured = selectedTypesConfigured,
             GpaSelectedTypes = _selectedGpaTypes.Order(StringComparer.Ordinal).ToList(),
+            GpaIncludedCourseKeys = _includedCourseKeys.Order(StringComparer.Ordinal).ToList(),
+            GpaExcludedCourseKeys = _excludedCourseKeys.Order(StringComparer.Ordinal).ToList(),
             LoginUrl = Required(LoginUrlText.Text, "统一身份认证入口"),
             GradeUrl = Required(GradeUrlText.Text, "成绩页面"),
             ListUrl = Required(ListUrlText.Text, "成绩查询接口"),
@@ -353,6 +368,8 @@ public partial class MainWindow : Window
         else _selectedGpaTypes.Remove(type);
         _gpaTypesConfigured = true;
         UpdateGpaTypesSummary();
+        RemoveRedundantCourseOverrides();
+        RefreshGradesGrid();
     }
 
     private void SelectAllGpaTypes_Click(object sender, RoutedEventArgs e)
@@ -361,6 +378,8 @@ public partial class MainWindow : Window
         foreach (var type in _availableGpaTypes) _selectedGpaTypes.Add(type);
         _gpaTypesConfigured = true;
         RefreshGpaTypeSelector();
+        RemoveRedundantCourseOverrides();
+        RefreshGradesGrid();
     }
 
     private void ClearGpaTypes_Click(object sender, RoutedEventArgs e)
@@ -368,6 +387,80 @@ public partial class MainWindow : Window
         _selectedGpaTypes.Clear();
         _gpaTypesConfigured = true;
         RefreshGpaTypeSelector();
+        RemoveRedundantCourseOverrides();
+        RefreshGradesGrid();
+    }
+
+    private void GradeIncludeCheckBox_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not CheckBox checkBox || checkBox.DataContext is not GradeCourse course ||
+            !course.GpaEligible || string.IsNullOrWhiteSpace(course.Key)) return;
+
+        var shouldInclude = checkBox.IsChecked == true;
+        var baseIncluded = IsIncludedByCurrentTypeRule(course);
+        _includedCourseKeys.Remove(course.Key);
+        _excludedCourseKeys.Remove(course.Key);
+        if (shouldInclude != baseIncluded)
+        {
+            if (shouldInclude) _includedCourseKeys.Add(course.Key);
+            else _excludedCourseKeys.Add(course.Key);
+        }
+
+        RefreshGradesGrid();
+        PersistGpaSelection();
+        e.Handled = true;
+    }
+
+    private void RefreshGradesGrid()
+    {
+        GradesGrid.ItemsSource = _latestCourses
+            .Select(course => course with { IncludedInGpa = IsEffectivelyIncluded(course) })
+            .ToList();
+    }
+
+    private bool IsIncludedByCurrentTypeRule(GradeCourse course)
+    {
+        if (!course.GpaEligible) return false;
+        return _gpaTypesConfigured ? _selectedGpaTypes.Contains(course.Type) : course.BaseIncludedInGpa;
+    }
+
+    private bool IsEffectivelyIncluded(GradeCourse course)
+    {
+        if (!course.GpaEligible) return false;
+        if (_excludedCourseKeys.Contains(course.Key)) return false;
+        if (_includedCourseKeys.Contains(course.Key)) return true;
+        return IsIncludedByCurrentTypeRule(course);
+    }
+
+    private void RemoveRedundantCourseOverrides()
+    {
+        foreach (var course in _latestCourses.Where(course => !string.IsNullOrWhiteSpace(course.Key)))
+        {
+            var baseIncluded = IsIncludedByCurrentTypeRule(course);
+            if (baseIncluded) _includedCourseKeys.Remove(course.Key);
+            else _excludedCourseKeys.Remove(course.Key);
+        }
+    }
+
+    private void PersistGpaSelection()
+    {
+        try
+        {
+            _settings.GpaSelectedTypesConfigured = _gpaTypesConfigured;
+            _settings.GpaSelectedTypes = _selectedGpaTypes.Order(StringComparer.Ordinal).ToList();
+            _settings.GpaIncludedCourseKeys = _includedCourseKeys.Order(StringComparer.Ordinal).ToList();
+            _settings.GpaExcludedCourseKeys = _excludedCourseKeys.Order(StringComparer.Ordinal).ToList();
+            _settingsStore.Save(_settings);
+            var message = _supervisor.IsRunning
+                ? "课程例外已保存；停止并重新启动后用于计算与通知。"
+                : "课程例外已保存，下次启动时生效。";
+            ActionStatusText.Text = message;
+            SettingsStatusText.Text = message;
+        }
+        catch (Exception error)
+        {
+            MessageBox.Show(this, error.Message, "无法保存绩点规则", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
     }
 
     private void UpdateGpaTypesSummary()
@@ -398,7 +491,7 @@ public partial class MainWindow : Window
         }
         else if (!_gpaTypesConfigured && _selectedGpaTypes.Count == 0)
         {
-            foreach (var type in courses.Where(course => course.IncludedInGpa).Select(course => course.Type))
+            foreach (var type in courses.Where(course => course.BaseIncludedInGpa).Select(course => course.Type))
             {
                 _selectedGpaTypes.Add(type);
             }
@@ -460,6 +553,7 @@ public partial class MainWindow : Window
     private void RenderSnapshot(GradeSnapshot snapshot)
     {
         var courses = snapshot.Courses ?? [];
+        _latestCourses = courses.ToList();
         UpdateAvailableGpaTypes(courses, snapshot);
         CoursesMetricText.Text = snapshot.Rows.ToString();
         GpaMetricText.Text = snapshot.Gpa;
@@ -468,7 +562,7 @@ public partial class MainWindow : Window
         CreditsMetricText.Text = $"{snapshot.Credits:0.##} 学分";
         LastCheckMetricText.Text = snapshot.CheckedAt.ToString("HH:mm");
         SourceMetricText.Text = string.IsNullOrWhiteSpace(snapshot.Source) ? "查询完成" : $"来源：{snapshot.Source}";
-        GradesGrid.ItemsSource = courses;
+        RefreshGradesGrid();
         GradesSummaryText.Text = courses.Count > 0
             ? $"共 {snapshot.Rows} 科 | 计入绩点 {snapshot.CountedRequired} 科 | {snapshot.Credits:0.##} 学分"
             : "当前缓存没有课程明细，成功查询后会自动显示";

@@ -286,7 +286,17 @@
                                 <DataGridTextColumn Header="学分" Binding="{Binding Credit}" Width="70" />
                                 <DataGridTextColumn Header="成绩" Binding="{Binding Score}" Width="80" />
                                 <DataGridTextColumn Header="类型" Binding="{Binding Type}" Width="130" />
-                                <DataGridCheckBoxColumn Header="计入绩点" Binding="{Binding IncludedInGpa}" Width="90" />
+                                <DataGridTemplateColumn Header="计入绩点" Width="90">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <CheckBox IsChecked="{Binding IncludedInGpa, Mode=OneWay}"
+                                                      IsEnabled="{Binding GpaEligible}"
+                                                      Click="GradeIncludeCheckBox_Click"
+                                                      HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                      ToolTip="单独加入或排除这门课程" />
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
                             </DataGrid.Columns>
                         </DataGrid>
                     </Border>

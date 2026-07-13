@@ -31,7 +31,9 @@ public static class MonitorConfigWriter
             {
                 scope = settings.GpaScope,
                 useSelectedTypes = settings.GpaSelectedTypesConfigured,
-                selectedTypes = settings.GpaSelectedTypes
+                selectedTypes = settings.GpaSelectedTypes,
+                includedCourseKeys = settings.GpaIncludedCourseKeys,
+                excludedCourseKeys = settings.GpaExcludedCourseKeys
             },
             stateFile = AppPaths.MonitorStateFile,
             guiSnapshotFile = AppPaths.MonitorGuiSnapshotFile,

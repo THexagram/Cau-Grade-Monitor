@@ -55,6 +55,26 @@ test('supports an arbitrary exact selection of course types', () => {
   assert.equal(none.counted, 0);
 });
 
+test('applies per-course include and exclude exceptions on top of the type rule', () => {
+  const required = { term: '2025-2026-1', code: 'R001', name: '必修课', type: '必修', credit: '3', score: 'A' };
+  const elective = { term: '2025-2026-1', code: 'E001', name: '选修课', type: '选修', credit: '2', score: 'B' };
+  const rows = [required, elective];
+
+  const withElective = calculateRequiredGpa(rows, 'required_and_sports', null, {
+    included: ['2025-2026-1||E001||选修课||2'],
+    excluded: []
+  });
+  assert.equal(withElective.formatted, '3.60');
+  assert.equal(withElective.counted, 2);
+
+  const electiveOnly = calculateRequiredGpa(rows, 'required_and_sports', null, {
+    included: ['2025-2026-1||E001||选修课||2'],
+    excluded: ['2025-2026-1||R001||必修课||3']
+  });
+  assert.equal(electiveOnly.formatted, '3.00');
+  assert.equal(electiveOnly.counted, 1);
+});
+
 test('builds compact GUI course rows with the current GPA inclusion flag', () => {
   const courses = buildGuiCourses([
     { term: '2025-2026-1', code: 'PE001', name: '体育', credit: '1', score: 'A-', type: '体育类', raw: ['体育类'] },
@@ -62,8 +82,8 @@ test('builds compact GUI course rows with the current GPA inclusion flag', () =>
   ], 'required_and_sports');
 
   assert.deepEqual(courses, [
-    { term: '2025-2026-1', code: 'PE001', name: '体育', credit: '1', score: 'A-', type: '体育类', includedInGpa: true },
-    { term: '2025-2026-1', code: 'EL001', name: '选修', credit: '2', score: 'A', type: '选修', includedInGpa: false }
+    { key: '2025-2026-1||PE001||体育||1', term: '2025-2026-1', code: 'PE001', name: '体育', credit: '1', score: 'A-', type: '体育类', baseIncludedInGpa: true, includedInGpa: true, gpaEligible: true },
+    { key: '2025-2026-1||EL001||选修||2', term: '2025-2026-1', code: 'EL001', name: '选修', credit: '2', score: 'A', type: '选修', baseIncludedInGpa: false, includedInGpa: false, gpaEligible: true }
   ]);
 });
 
@@ -84,7 +104,12 @@ test('loads and normalizes the saved multi-select type rule', () => {
   const configFile = path.join(directory, 'config.json');
   try {
     fs.writeFileSync(configFile, JSON.stringify({
-      gpa: { useSelectedTypes: true, selectedTypes: [' 体育类 ', '限选', '限选'] },
+      gpa: {
+        useSelectedTypes: true,
+        selectedTypes: [' 体育类 ', '限选', '限选'],
+        includedCourseKeys: [' course-a ', 'course-a'],
+        excludedCourseKeys: ['course-b', ' course-b ']
+      },
       browser: {},
       proxy: {},
       feishu: {}
@@ -92,6 +117,8 @@ test('loads and normalizes the saved multi-select type rule', () => {
     const config = loadConfig(configFile);
     assert.equal(config.gpa.useSelectedTypes, true);
     assert.deepEqual(config.gpa.selectedTypes, ['体育类', '限选']);
+    assert.deepEqual(config.gpa.includedCourseKeys, ['course-a']);
+    assert.deepEqual(config.gpa.excludedCourseKeys, ['course-b']);
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }
