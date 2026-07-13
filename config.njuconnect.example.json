@@ -14,6 +14,9 @@
     "noChangeEverySeconds": 1800,
     "loginNeededEverySeconds": 300
   },
+  "gpa": {
+    "scope": "required_and_sports"
+  },
   "stateFile": "state.json",
   "proxy": {
     "enabled": true,

@@ -27,6 +27,10 @@ public static class MonitorConfigWriter
                 noChangeEverySeconds = 1800,
                 loginNeededEverySeconds = 300
             },
+            gpa = new
+            {
+                scope = settings.GpaScope
+            },
             stateFile = AppPaths.MonitorStateFile,
             proxy = new
             {

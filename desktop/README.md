@@ -9,6 +9,7 @@ Windows GUI integrating the CAU grade monitor with an EasierConnect-compatible S
 - Preserve the managed Edge profile and login state between restarts.
 - Store the VPN password, Feishu webhook, and signing secret with Windows DPAPI for the current user.
 - Display current grade count, required and sports-course weighted GPA, service state, and recent logs.
+- Select the GPA scope and browse all courses from the latest successful grade query.
 - Minimize to the Windows notification area for long-running operation.
 
 ## Run

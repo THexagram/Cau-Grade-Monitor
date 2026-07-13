@@ -19,3 +19,19 @@ test('finds sports in raw cells and excludes non-required courses', () => {
   assert.equal(isIncludedGpaRow({ type: '非必修' }), false);
   assert.equal(isIncludedGpaRow({ raw: ['2025-2026', '体育类'] }), true);
 });
+
+test('supports required-only and all-course GPA scopes', () => {
+  const rows = [
+    { type: '必修', credit: '3', score: 'A' },
+    { type: '体育类', credit: '1', score: 'B+' },
+    { type: '选修', credit: '2', score: 'B' }
+  ];
+
+  const requiredOnly = calculateRequiredGpa(rows, 'required');
+  assert.equal(requiredOnly.formatted, '4.00');
+  assert.equal(requiredOnly.counted, 1);
+
+  const allCourses = calculateRequiredGpa(rows, 'all');
+  assert.equal(allCourses.formatted, '3.55');
+  assert.equal(allCourses.counted, 3);
+});

@@ -77,6 +77,12 @@
                             <TextBlock Text="总览" Foreground="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}" />
                         </StackPanel>
                     </Button>
+                    <Button x:Name="GradesNav" Style="{StaticResource NavButton}" Click="Navigate_Click" Tag="Grades">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock FontFamily="Segoe Fluent Icons" Text="&#xE9D2;" Foreground="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}" FontSize="16" Width="28" />
+                            <TextBlock Text="全部成绩" Foreground="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}" />
+                        </StackPanel>
+                    </Button>
                     <Button x:Name="SettingsNav" Style="{StaticResource NavButton}" Click="Navigate_Click" Tag="Settings">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock FontFamily="Segoe Fluent Icons" Text="&#xE713;" Foreground="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}" FontSize="16" Width="28" />
@@ -171,7 +177,7 @@
                         </Border>
                         <Border Background="White" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="6" Padding="18" Margin="0,0,10,0">
                             <StackPanel>
-                                <TextBlock Text="必修及体育绩点" Foreground="{StaticResource MutedTextBrush}" FontSize="12" />
+                                <TextBlock x:Name="GpaScopeMetricLabel" Text="必修及体育绩点" Foreground="{StaticResource MutedTextBrush}" FontSize="12" />
                                 <TextBlock x:Name="GpaMetricText" Text="--" Style="{StaticResource MetricValue}" Foreground="{StaticResource AccentBrush}" />
                                 <TextBlock Text="按学分加权" Foreground="{StaticResource MutedTextBrush}" FontSize="12" />
                             </StackPanel>
@@ -250,6 +256,40 @@
                             </Grid>
                         </Border>
                     </Grid>
+                </Grid>
+
+                <Grid x:Name="GradesPanel" Visibility="Collapsed">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <Grid Margin="0,0,0,14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="GradesSummaryText" Text="等待首次成功查询" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        <TextBlock x:Name="GradesUpdatedText" Grid.Column="1" Text="--" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center" />
+                    </Grid>
+
+                    <Border Grid.Row="1" Background="White" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="6">
+                        <DataGrid x:Name="GradesGrid" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" CanUserDeleteRows="False"
+                                  CanUserReorderColumns="True" CanUserResizeColumns="True" CanUserSortColumns="True"
+                                  HeadersVisibility="Column" GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#E8ECE9"
+                                  BorderThickness="0" RowHeaderWidth="0" AlternatingRowBackground="#F8FAF9"
+                                  Background="White" FontFamily="Segoe UI, Microsoft YaHei UI" FontSize="13">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="学期" Binding="{Binding Term}" Width="135" />
+                                <DataGridTextColumn Header="课程号" Binding="{Binding Code}" Width="120" />
+                                <DataGridTextColumn Header="课程名" Binding="{Binding Name}" Width="*" MinWidth="180" />
+                                <DataGridTextColumn Header="学分" Binding="{Binding Credit}" Width="70" />
+                                <DataGridTextColumn Header="成绩" Binding="{Binding Score}" Width="80" />
+                                <DataGridTextColumn Header="类型" Binding="{Binding Type}" Width="130" />
+                                <DataGridCheckBoxColumn Header="计入绩点" Binding="{Binding IncludedInGpa}" Width="90" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Border>
                 </Grid>
 
                 <Grid x:Name="SettingsPanel" Visibility="Collapsed">
@@ -334,6 +374,12 @@
                                         <TextBlock Text="成绩监控" Style="{StaticResource SectionTitle}" />
                                         <TextBlock Text="查询间隔（秒）" Style="{StaticResource FieldLabel}" />
                                         <TextBox x:Name="PollIntervalText" />
+                                        <TextBlock Text="绩点统计范围" Style="{StaticResource FieldLabel}" Margin="0,14,0,5" />
+                                        <ComboBox x:Name="GpaScopeCombo">
+                                            <ComboBoxItem Content="仅必修" Tag="required" />
+                                            <ComboBoxItem Content="必修 + 体育类" Tag="required_and_sports" />
+                                            <ComboBoxItem Content="全部可换算课程" Tag="all" />
+                                        </ComboBox>
                                         <TextBlock Text="统一身份认证入口" Style="{StaticResource FieldLabel}" Margin="0,14,0,5" />
                                         <TextBox x:Name="LoginUrlText" />
                                         <TextBlock Text="成绩页面" Style="{StaticResource FieldLabel}" Margin="0,14,0,5" />

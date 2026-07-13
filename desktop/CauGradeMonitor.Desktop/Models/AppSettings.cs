@@ -20,6 +20,7 @@ public sealed class AppSettings
     public int EofRestartCount { get; set; } = 4;
 
     public int PollIntervalSeconds { get; set; } = 60;
+    public string GpaScope { get; set; } = "required_and_sports";
     public string LoginUrl { get; set; } = "https://one.cau.edu.cn/tp_up/view?m=up#act=portal/viewhome";
     public string GradeUrl { get; set; } = "https://newjw.cau.edu.cn/jsxsd/kscj/cjcx_frm";
     public string ListUrl { get; set; } = "https://newjw.cau.edu.cn/jsxsd/kscj/cjcx_list";

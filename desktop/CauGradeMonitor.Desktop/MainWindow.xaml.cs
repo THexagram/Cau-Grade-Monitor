@@ -108,13 +108,16 @@ public partial class MainWindow : Window
     private void ShowPage(string destination)
     {
         DashboardPanel.Visibility = destination == "Dashboard" ? Visibility.Visible : Visibility.Collapsed;
+        GradesPanel.Visibility = destination == "Grades" ? Visibility.Visible : Visibility.Collapsed;
         SettingsPanel.Visibility = destination == "Settings" ? Visibility.Visible : Visibility.Collapsed;
         LogsPanel.Visibility = destination == "Logs" ? Visibility.Visible : Visibility.Collapsed;
         SetNavSelected(DashboardNav, destination == "Dashboard");
+        SetNavSelected(GradesNav, destination == "Grades");
         SetNavSelected(SettingsNav, destination == "Settings");
         SetNavSelected(LogsNav, destination == "Logs");
         (PageTitleText.Text, PageSubtitleText.Text) = destination switch
         {
+            "Grades" => ("全部成绩", "查看最近一次成功查询返回的课程与成绩"),
             "Settings" => ("设置", "配置 VPN、成绩查询、飞书通知与记忆选项"),
             "Logs" => ("运行日志", "查看 VPN 重连与成绩查询的完整过程"),
             _ => ("运行总览", "查看连接、成绩与通知状态")
@@ -250,6 +253,8 @@ public partial class MainWindow : Window
         RestartMinutesText.Text = settings.VpnRestartMinutes.ToString();
         EofCountText.Text = settings.EofRestartCount.ToString();
         PollIntervalText.Text = settings.PollIntervalSeconds.ToString();
+        SelectGpaScope(settings.GpaScope);
+        GpaScopeMetricLabel.Text = GpaScopeLabel(settings.GpaScope);
         LoginUrlText.Text = settings.LoginUrl;
         GradeUrlText.Text = settings.GradeUrl;
         ListUrlText.Text = settings.ListUrl;
@@ -280,6 +285,7 @@ public partial class MainWindow : Window
             VpnRestartMinutes = ParseInteger(RestartMinutesText.Text, "VPN 重连间隔", 0, 10080),
             EofRestartCount = ParseInteger(EofCountText.Text, "EOF 阈值", 0, 100),
             PollIntervalSeconds = ParseInteger(PollIntervalText.Text, "查询间隔", 30, 86400),
+            GpaScope = SelectedGpaScope(),
             LoginUrl = Required(LoginUrlText.Text, "统一身份认证入口"),
             GradeUrl = Required(GradeUrlText.Text, "成绩页面"),
             ListUrl = Required(ListUrlText.Text, "成绩查询接口"),
@@ -291,6 +297,26 @@ public partial class MainWindow : Window
         NextCheckText.Text = $"查询间隔：{settings.PollIntervalSeconds} 秒";
         return settings;
     }
+
+    private void SelectGpaScope(string scope)
+    {
+        GpaScopeCombo.SelectedItem = GpaScopeCombo.Items
+            .OfType<ComboBoxItem>()
+            .FirstOrDefault(item => string.Equals(item.Tag?.ToString(), scope, StringComparison.Ordinal))
+            ?? GpaScopeCombo.Items[1];
+    }
+
+    private string SelectedGpaScope()
+    {
+        return (GpaScopeCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "required_and_sports";
+    }
+
+    private static string GpaScopeLabel(string scope) => scope switch
+    {
+        "required" => "必修课绩点",
+        "all" => "全部可换算课程绩点",
+        _ => "必修及体育绩点"
+    };
 
     private static int ParseInteger(string value, string fieldName, int minimum, int maximum)
     {
@@ -325,12 +351,19 @@ public partial class MainWindow : Window
 
     private void RenderSnapshot(GradeSnapshot snapshot)
     {
+        var courses = snapshot.Courses ?? [];
         CoursesMetricText.Text = snapshot.Rows.ToString();
         GpaMetricText.Text = snapshot.Gpa;
+        GpaScopeMetricLabel.Text = GpaScopeLabel(snapshot.GpaScope);
         RequiredMetricText.Text = $"{snapshot.CountedRequired}/{snapshot.Required}";
         CreditsMetricText.Text = $"{snapshot.Credits:0.##} 学分";
         LastCheckMetricText.Text = snapshot.CheckedAt.ToString("HH:mm");
         SourceMetricText.Text = string.IsNullOrWhiteSpace(snapshot.Source) ? "查询完成" : $"来源：{snapshot.Source}";
+        GradesGrid.ItemsSource = courses;
+        GradesSummaryText.Text = courses.Count > 0
+            ? $"共 {snapshot.Rows} 科 | 计入绩点 {snapshot.CountedRequired} 科 | {snapshot.Credits:0.##} 学分"
+            : "当前缓存没有课程明细，成功查询后会自动显示";
+        GradesUpdatedText.Text = $"{GpaScopeLabel(snapshot.GpaScope)} | {snapshot.CheckedAt:yyyy-MM-dd HH:mm:ss}";
         ActionStatusText.Text = "最近查询正常";
     }
 

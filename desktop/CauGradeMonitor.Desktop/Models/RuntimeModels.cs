@@ -17,6 +17,15 @@ public sealed record RuntimeStatus(
     DateTimeOffset? VpnConnectedAt,
     DateTimeOffset? LastCheckAt);
 
+public sealed record GradeCourse(
+    string Term,
+    string Code,
+    string Name,
+    string Credit,
+    string Score,
+    string Type,
+    bool IncludedInGpa);
+
 public sealed record GradeSnapshot(
     int Rows,
     string Gpa,
@@ -24,6 +33,8 @@ public sealed record GradeSnapshot(
     int CountedRequired,
     double Credits,
     string Source,
-    DateTimeOffset CheckedAt);
+    DateTimeOffset CheckedAt,
+    IReadOnlyList<GradeCourse>? Courses = null,
+    string GpaScope = "required_and_sports");
 
 public sealed record LogEntry(DateTimeOffset Timestamp, string Source, string Message, ServicePhase Level);

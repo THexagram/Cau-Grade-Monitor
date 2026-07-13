@@ -136,6 +136,10 @@ function loadConfig(configPath) {
   config.logging = config.logging || {};
   config.logging.noChangeEverySeconds = positiveNumber(config.logging.noChangeEverySeconds, 1800);
   config.logging.loginNeededEverySeconds = positiveNumber(config.logging.loginNeededEverySeconds, 300);
+  config.gpa = config.gpa || {};
+  if (!['required', 'required_and_sports', 'all'].includes(config.gpa.scope)) {
+    config.gpa.scope = 'required_and_sports';
+  }
   config.stateFile = resolvePathMaybe(base, config.stateFile || 'state.json');
   config.browser = config.browser || {};
   config.browser.lowResourceMode = config.browser.lowResourceMode !== false;
@@ -294,9 +298,12 @@ function hasSportsMarker(value) {
   return normalize(value).includes('体育类');
 }
 
-function isIncludedGpaRow(row) {
+function isIncludedGpaRow(row, scope = 'required_and_sports') {
+  if (scope === 'all') return true;
   const markers = [row.type, row.property, row.nature, row.category, row.group];
-  const isIncluded = (value) => hasRequiredMarker(value) || hasSportsMarker(value);
+  const isIncluded = scope === 'required'
+    ? hasRequiredMarker
+    : (value) => hasRequiredMarker(value) || hasSportsMarker(value);
   if (markers.some(isIncluded)) return true;
   return Array.isArray(row.raw) && row.raw.some(isIncluded);
 }
@@ -305,14 +312,14 @@ function formatGpa(gpa) {
   return gpa === null ? '暂无可计算绩点' : gpa.toFixed(2);
 }
 
-function calculateRequiredGpa(rows) {
+function calculateRequiredGpa(rows, scope = 'required_and_sports') {
   let weightedPoints = 0;
   let totalCredits = 0;
   let counted = 0;
   let required = 0;
 
   for (const row of rows) {
-    if (!isIncludedGpaRow(row)) continue;
+    if (!isIncludedGpaRow(row, scope)) continue;
     required += 1;
     const credit = parseCredit(row.credit);
     const gradePoint = gradePointForScore(row.score);
@@ -809,7 +816,7 @@ async function runMonitor(config, options) {
       }
       await closeExtraPages(context, page, config);
 
-      const gpaInfo = calculateRequiredGpa(rows);
+      const gpaInfo = calculateRequiredGpa(rows, config.gpa.scope);
       const startupSummary = formatStartupSummary(rows, gpaInfo);
       emitGuiEvent('snapshot', {
         rows: rows.length,
@@ -817,7 +824,18 @@ async function runMonitor(config, options) {
         required: gpaInfo.required,
         countedRequired: gpaInfo.counted,
         credits: gpaInfo.credits,
-        source: result.source
+        source: result.source,
+        gpaScope: config.gpa.scope,
+        courses: rows.map((row) => ({
+          term: row.term || '',
+          code: row.code || '',
+          name: row.name || '',
+          credit: row.credit || '',
+          score: row.score || '',
+          type: row.type || row.property || row.group || '',
+          includedInGpa: isIncludedGpaRow(row, config.gpa.scope) &&
+            parseCredit(row.credit) !== null && gradePointForScore(row.score) !== null
+        }))
       });
       async function sendStartupSummaryOnce() {
         if (config.feishu.notifyOnStart && !startupNotified) {
@@ -928,5 +946,5 @@ if (require.main === module) {
     process.exitCode = 1;
   });
 } else {
-  module.exports = { calculateRequiredGpa, isIncludedGpaRow };
+  module.exports = { calculateRequiredGpa, isIncludedGpaRow, loadConfig };
 }

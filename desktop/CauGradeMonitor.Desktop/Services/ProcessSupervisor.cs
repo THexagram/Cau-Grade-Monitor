@@ -392,6 +392,21 @@ public sealed class ProcessSupervisor : IAsyncDisposable
                     break;
                 case "snapshot":
                     _lastCheckAt = DateTimeOffset.Now;
+                    var courses = new List<GradeCourse>();
+                    if (root.TryGetProperty("courses", out var courseElements) && courseElements.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var course in courseElements.EnumerateArray())
+                        {
+                            courses.Add(new GradeCourse(
+                                ReadJsonString(course, "term"),
+                                ReadJsonString(course, "code"),
+                                ReadJsonString(course, "name"),
+                                ReadJsonString(course, "credit"),
+                                ReadJsonString(course, "score"),
+                                ReadJsonString(course, "type"),
+                                course.TryGetProperty("includedInGpa", out var included) && included.ValueKind == JsonValueKind.True));
+                        }
+                    }
                     var snapshot = new GradeSnapshot(
                         root.GetProperty("rows").GetInt32(),
                         root.GetProperty("gpa").GetString() ?? "-",
@@ -399,7 +414,9 @@ public sealed class ProcessSupervisor : IAsyncDisposable
                         root.GetProperty("countedRequired").GetInt32(),
                         root.GetProperty("credits").GetDouble(),
                         root.GetProperty("source").GetString() ?? "",
-                        _lastCheckAt.Value);
+                        _lastCheckAt.Value,
+                        courses,
+                        ReadJsonString(root, "gpaScope", "required_and_sports"));
                     SnapshotStore.Save(snapshot);
                     SnapshotChanged?.Invoke(snapshot);
                     UpdateStatus(Status.VpnPhase, Status.VpnText, ServicePhase.Running, "监测正常");
@@ -422,6 +439,13 @@ public sealed class ProcessSupervisor : IAsyncDisposable
         {
             WriteLog("系统", $"无法读取监控状态：{error.Message}", ServicePhase.Degraded);
         }
+    }
+
+    private static string ReadJsonString(JsonElement element, string propertyName, string fallback = "")
+    {
+        return element.TryGetProperty(propertyName, out var property) && property.ValueKind == JsonValueKind.String
+            ? property.GetString() ?? fallback
+            : fallback;
     }
 
     private async Task StopProcessesAsync()
