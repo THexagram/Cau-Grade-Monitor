@@ -20,16 +20,22 @@
 
 ## 下载
 
-推荐从 [Releases](https://github.com/THexagram/Cau-Grade-Monitor/releases/latest) 下载 `CauGradeMonitor-win-x64.zip`。
+从 [Releases](https://github.com/THexagram/Cau-Grade-Monitor/releases/latest) 按使用方式选择：
 
-公开便携包包含桌面程序、Node.js 运行时和 Playwright，但不会包含：
+| 文件 | 适用场景 | 启动方式 |
+| --- | --- | --- |
+| `CauGradeMonitor-gui-win-x64.zip` | 推荐，大多数 Windows 用户 | 运行 `CauGradeMonitor.exe` |
+| `CauGradeMonitor-cli-portable-win-x64.zip` | 只使用命令行，不想安装 Node.js | 运行 `pwsh .\start-full.ps1` |
+| `CauGradeMonitor-cli-node-required.zip` | 已安装 Node.js，希望下载最小包 | 先运行 `pwsh .\install.ps1` |
+
+所有公开包都不会包含：
 
 - EasierConnect 或其他第三方 VPN 二进制文件
 - VPN 账号密码
 - 飞书 Webhook 或签名密钥
 - Edge 登录资料和成绩缓存
 
-解压后运行 `CauGradeMonitor.exe`。首次启动时在“设置”中选择本机的 `EasierConnect.exe`，填写 VPN 与飞书配置，再点击“启动全部”。如果当前网络可以直接访问教务系统，可以只启动成绩监控。
+GUI 版首次启动时在“设置”中选择本机的 `EasierConnect.exe`，填写 VPN 与飞书配置，再点击“启动全部”。命令行版按包内示例创建 `.env`、`config.json` 和可选的 `vpn.env`；需要同时管理 VPN 时运行 `pwsh .\start-vpn-and-monitor.ps1`。如果当前网络可以直接访问教务系统，可以只启动成绩监控。
 
 运行数据保存在：
 
@@ -145,6 +151,16 @@ pwsh -File .\build-desktop.ps1 -ExcludeEasierConnect
 ```
 
 结果位于 `desktop-publish/CauGradeMonitor-win-x64.zip`。
+
+## 构建命令行包
+
+同时生成需要本机 Node.js 的精简包和内置 Node.js 的 Windows x64 便携包：
+
+```powershell
+pwsh -File .\build-cli.ps1
+```
+
+结果位于 `cli-publish/`。命令行构建不会包含 EasierConnect、真实配置、浏览器资料或运行状态。
 
 ## 测试
 
