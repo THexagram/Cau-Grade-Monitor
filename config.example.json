@@ -18,6 +18,7 @@
     "scope": "required_and_sports"
   },
   "stateFile": "state.json",
+  "guiSnapshotFile": "gui-snapshot.json",
   "proxy": {
     "enabled": false,
     "server": "",

@@ -9,6 +9,7 @@ public static class AppPaths
     public static string SettingsFile => Path.Combine(DataDirectory, "settings.json");
     public static string MonitorConfigFile => Path.Combine(DataDirectory, "monitor-config.json");
     public static string MonitorStateFile => Path.Combine(DataDirectory, "grade-state.json");
+    public static string MonitorGuiSnapshotFile => Path.Combine(DataDirectory, "monitor-gui-snapshot.json");
     public static string SnapshotFile => Path.Combine(DataDirectory, "last-snapshot.json");
     public static string BrowserProfileDirectory => Path.Combine(DataDirectory, "browser-profile");
     public static string LogsDirectory => Path.Combine(DataDirectory, "logs");

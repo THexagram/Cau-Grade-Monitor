@@ -392,19 +392,25 @@ public sealed class ProcessSupervisor : IAsyncDisposable
                     break;
                 case "snapshot":
                     _lastCheckAt = DateTimeOffset.Now;
-                    var courses = new List<GradeCourse>();
-                    if (root.TryGetProperty("courses", out var courseElements) && courseElements.ValueKind == JsonValueKind.Array)
+                    List<GradeCourse> courses;
+                    if (root.TryGetProperty("courses", out var inlineCourses) && inlineCourses.ValueKind == JsonValueKind.Array)
                     {
-                        foreach (var course in courseElements.EnumerateArray())
+                        courses = ReadCourses(inlineCourses);
+                    }
+                    else if (root.TryGetProperty("courseSnapshotWritten", out var snapshotWritten) && snapshotWritten.ValueKind == JsonValueKind.False)
+                    {
+                        courses = [];
+                        WriteLog("系统", "课程明细快照写入失败，本次仅更新成绩汇总。", ServicePhase.Degraded);
+                    }
+                    else
+                    {
+                        courses = ReadCourseSnapshotFile();
+                        var expectedCourseCount = root.TryGetProperty("courseCount", out var countElement) && countElement.TryGetInt32(out var count)
+                            ? count
+                            : root.GetProperty("rows").GetInt32();
+                        if (courses.Count != expectedCourseCount)
                         {
-                            courses.Add(new GradeCourse(
-                                ReadJsonString(course, "term"),
-                                ReadJsonString(course, "code"),
-                                ReadJsonString(course, "name"),
-                                ReadJsonString(course, "credit"),
-                                ReadJsonString(course, "score"),
-                                ReadJsonString(course, "type"),
-                                course.TryGetProperty("includedInGpa", out var included) && included.ValueKind == JsonValueKind.True));
+                            WriteLog("系统", $"课程明细快照暂未就绪：期望 {expectedCourseCount} 科，读取到 {courses.Count} 科。", ServicePhase.Degraded);
                         }
                     }
                     var snapshot = new GradeSnapshot(
@@ -446,6 +452,39 @@ public sealed class ProcessSupervisor : IAsyncDisposable
         return element.TryGetProperty(propertyName, out var property) && property.ValueKind == JsonValueKind.String
             ? property.GetString() ?? fallback
             : fallback;
+    }
+
+    private static List<GradeCourse> ReadCourseSnapshotFile()
+    {
+        try
+        {
+            if (!File.Exists(AppPaths.MonitorGuiSnapshotFile)) return [];
+            using var document = JsonDocument.Parse(File.ReadAllText(AppPaths.MonitorGuiSnapshotFile));
+            return document.RootElement.TryGetProperty("courses", out var courses) && courses.ValueKind == JsonValueKind.Array
+                ? ReadCourses(courses)
+                : [];
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException)
+        {
+            return [];
+        }
+    }
+
+    private static List<GradeCourse> ReadCourses(JsonElement courseElements)
+    {
+        var courses = new List<GradeCourse>();
+        foreach (var course in courseElements.EnumerateArray())
+        {
+            courses.Add(new GradeCourse(
+                ReadJsonString(course, "term"),
+                ReadJsonString(course, "code"),
+                ReadJsonString(course, "name"),
+                ReadJsonString(course, "credit"),
+                ReadJsonString(course, "score"),
+                ReadJsonString(course, "type"),
+                course.TryGetProperty("includedInGpa", out var included) && included.ValueKind == JsonValueKind.True));
+        }
+        return courses;
     }
 
     private async Task StopProcessesAsync()
@@ -512,6 +551,8 @@ public sealed class ProcessSupervisor : IAsyncDisposable
     private static string? SanitizeVpnLine(string line)
     {
         if (line.Contains("client connection failed: could not read packet header", StringComparison.OrdinalIgnoreCase)) return null;
+        if (line.Contains("client connection failed: from client to backend", StringComparison.OrdinalIgnoreCase) &&
+            line.Contains("aborted by the software in your host machine", StringComparison.OrdinalIgnoreCase)) return null;
         if (line.Contains("Password to encrypt", StringComparison.OrdinalIgnoreCase)) return "正在准备加密登录信息。";
         if (line.Contains("Encrypted Password", StringComparison.OrdinalIgnoreCase)) return "登录信息已加密。";
         if (line.Contains("RSA Key", StringComparison.OrdinalIgnoreCase)) return null;

@@ -32,6 +32,7 @@ public static class MonitorConfigWriter
                 scope = settings.GpaScope
             },
             stateFile = AppPaths.MonitorStateFile,
+            guiSnapshotFile = AppPaths.MonitorGuiSnapshotFile,
             proxy = new
             {
                 enabled = true,

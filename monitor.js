@@ -56,6 +56,21 @@ function writeJson(file, data) {
   fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf8');
 }
 
+function writeJsonAtomic(file, data) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const temporaryFile = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(temporaryFile, JSON.stringify(data), 'utf8');
+  try {
+    fs.renameSync(temporaryFile, file);
+  } catch (error) {
+    if (process.platform !== 'win32' || !['EEXIST', 'EPERM'].includes(error.code)) throw error;
+    fs.rmSync(file, { force: true });
+    fs.renameSync(temporaryFile, file);
+  } finally {
+    fs.rmSync(temporaryFile, { force: true });
+  }
+}
+
 function loadEnvFile(file) {
   if (!fs.existsSync(file)) return;
   const lines = fs.readFileSync(file, 'utf8').split(/\r?\n/);
@@ -141,6 +156,7 @@ function loadConfig(configPath) {
     config.gpa.scope = 'required_and_sports';
   }
   config.stateFile = resolvePathMaybe(base, config.stateFile || 'state.json');
+  config.guiSnapshotFile = resolvePathMaybe(base, config.guiSnapshotFile || 'gui-snapshot.json');
   config.browser = config.browser || {};
   config.browser.lowResourceMode = config.browser.lowResourceMode !== false;
   config.browser.closeExtraPages = config.browser.closeExtraPages !== false;
@@ -337,6 +353,19 @@ function calculateRequiredGpa(rows, scope = 'required_and_sports') {
     required,
     credits: totalCredits
   };
+}
+
+function buildGuiCourses(rows, scope) {
+  return rows.map((row) => ({
+    term: row.term || '',
+    code: row.code || '',
+    name: row.name || '',
+    credit: row.credit || '',
+    score: row.score || '',
+    type: row.type || row.property || row.group || '',
+    includedInGpa: isIncludedGpaRow(row, scope) &&
+      parseCredit(row.credit) !== null && gradePointForScore(row.score) !== null
+  }));
 }
 
 function formatStartupSummary(rows, gpaInfo) {
@@ -818,6 +847,18 @@ async function runMonitor(config, options) {
 
       const gpaInfo = calculateRequiredGpa(rows, config.gpa.scope);
       const startupSummary = formatStartupSummary(rows, gpaInfo);
+      const guiCourses = buildGuiCourses(rows, config.gpa.scope);
+      let courseSnapshotWritten = false;
+      try {
+        writeJsonAtomic(config.guiSnapshotFile, {
+          updatedAt: new Date().toISOString(),
+          gpaScope: config.gpa.scope,
+          courses: guiCourses
+        });
+        courseSnapshotWritten = true;
+      } catch (error) {
+        log(`GUI course snapshot write failed: ${error.message}`);
+      }
       emitGuiEvent('snapshot', {
         rows: rows.length,
         gpa: gpaInfo.formatted,
@@ -826,16 +867,8 @@ async function runMonitor(config, options) {
         credits: gpaInfo.credits,
         source: result.source,
         gpaScope: config.gpa.scope,
-        courses: rows.map((row) => ({
-          term: row.term || '',
-          code: row.code || '',
-          name: row.name || '',
-          credit: row.credit || '',
-          score: row.score || '',
-          type: row.type || row.property || row.group || '',
-          includedInGpa: isIncludedGpaRow(row, config.gpa.scope) &&
-            parseCredit(row.credit) !== null && gradePointForScore(row.score) !== null
-        }))
+        courseCount: guiCourses.length,
+        courseSnapshotWritten
       });
       async function sendStartupSummaryOnce() {
         if (config.feishu.notifyOnStart && !startupNotified) {
@@ -946,5 +979,5 @@ if (require.main === module) {
     process.exitCode = 1;
   });
 } else {
-  module.exports = { calculateRequiredGpa, isIncludedGpaRow, loadConfig };
+  module.exports = { buildGuiCourses, calculateRequiredGpa, isIncludedGpaRow, loadConfig, writeJsonAtomic };
 }
