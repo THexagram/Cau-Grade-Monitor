@@ -290,14 +290,19 @@ function hasRequiredMarker(value) {
   return text.includes('必修') && !text.includes('非必修');
 }
 
-function isRequiredRow(row) {
+function hasSportsMarker(value) {
+  return normalize(value).includes('体育类');
+}
+
+function isIncludedGpaRow(row) {
   const markers = [row.type, row.property, row.nature, row.category, row.group];
-  if (markers.some(hasRequiredMarker)) return true;
-  return Array.isArray(row.raw) && row.raw.some(hasRequiredMarker);
+  const isIncluded = (value) => hasRequiredMarker(value) || hasSportsMarker(value);
+  if (markers.some(isIncluded)) return true;
+  return Array.isArray(row.raw) && row.raw.some(isIncluded);
 }
 
 function formatGpa(gpa) {
-  return gpa === null ? '暂无可计算必修绩点' : gpa.toFixed(2);
+  return gpa === null ? '暂无可计算绩点' : gpa.toFixed(2);
 }
 
 function calculateRequiredGpa(rows) {
@@ -307,7 +312,7 @@ function calculateRequiredGpa(rows) {
   let required = 0;
 
   for (const row of rows) {
-    if (!isRequiredRow(row)) continue;
+    if (!isIncludedGpaRow(row)) continue;
     required += 1;
     const credit = parseCredit(row.credit);
     const gradePoint = gradePointForScore(row.score);
@@ -916,8 +921,12 @@ async function main() {
   await runMonitor(config, { once: args.once });
 }
 
-main().catch((error) => {
-  emitGuiEvent('fatal', { message: error.message });
-  console.error(error.stack || error.message);
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  main().catch((error) => {
+    emitGuiEvent('fatal', { message: error.message });
+    console.error(error.stack || error.message);
+    process.exitCode = 1;
+  });
+} else {
+  module.exports = { calculateRequiredGpa, isIncludedGpaRow };
+}

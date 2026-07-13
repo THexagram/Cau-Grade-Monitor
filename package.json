@@ -8,7 +8,8 @@
     "start": "node monitor.js",
     "once": "node monitor.js --once",
     "test-feishu": "node monitor.js --test-feishu",
-    "check": "node --check monitor.js"
+    "check": "node --check monitor.js",
+    "test": "node --test monitor.test.js"
   },
   "dependencies": {
     "playwright-core": "^1.55.0"

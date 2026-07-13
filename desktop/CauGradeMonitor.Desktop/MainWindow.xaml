@@ -171,14 +171,14 @@
                         </Border>
                         <Border Background="White" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="6" Padding="18" Margin="0,0,10,0">
                             <StackPanel>
-                                <TextBlock Text="必修课绩点" Foreground="{StaticResource MutedTextBrush}" FontSize="12" />
+                                <TextBlock Text="必修及体育绩点" Foreground="{StaticResource MutedTextBrush}" FontSize="12" />
                                 <TextBlock x:Name="GpaMetricText" Text="--" Style="{StaticResource MetricValue}" Foreground="{StaticResource AccentBrush}" />
                                 <TextBlock Text="按学分加权" Foreground="{StaticResource MutedTextBrush}" FontSize="12" />
                             </StackPanel>
                         </Border>
                         <Border Background="White" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="6" Padding="18" Margin="0,0,10,0">
                             <StackPanel>
-                                <TextBlock Text="计入必修" Foreground="{StaticResource MutedTextBrush}" FontSize="12" />
+                                <TextBlock Text="计入绩点" Foreground="{StaticResource MutedTextBrush}" FontSize="12" />
                                 <TextBlock x:Name="RequiredMetricText" Text="--" Style="{StaticResource MetricValue}" />
                                 <TextBlock x:Name="CreditsMetricText" Text="-- 学分" Foreground="{StaticResource MutedTextBrush}" FontSize="12" />
                             </StackPanel>
