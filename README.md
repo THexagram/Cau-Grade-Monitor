@@ -1,204 +1,83 @@
-# CAU Grade Feishu Monitor
+# CAU Grade Monitor
 
-中国农业大学新教务成绩监控工具。程序在 Windows 服务器上启动独立 Edge 浏览器，定时请求教务成绩接口；发现新增成绩或成绩变化后，通过飞书自定义机器人发送通知。
+[![CI](https://github.com/THexagram/Cau-Grade-Monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/THexagram/Cau-Grade-Monitor/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/THexagram/Cau-Grade-Monitor)](https://github.com/THexagram/Cau-Grade-Monitor/releases/latest)
+[![Platform](https://img.shields.io/badge/platform-Windows-0078D4)](https://github.com/THexagram/Cau-Grade-Monitor)
 
-## Features
+中国农业大学教务成绩监控工具。它在 Windows 上复用独立 Edge 登录状态，定时请求成绩接口，并在出现新成绩或成绩变化时通过飞书机器人通知。桌面端同时管理 EasierConnect 兼容 VPN、成绩监控、绩点规则和运行日志。
 
-- 提供原生 Windows GUI，将 VPN、成绩监控、飞书通知和运行日志集中到一个窗口。
-- GUI 使用 Windows 当前用户加密保存 VPN 密码、飞书 Webhook 和签名密钥，并复用独立 Edge 登录状态。
-- 每 60 秒请求一次成绩接口。
-- 复用独立 Edge 浏览器登录态，不依赖 Cookie 提取。
-- 查询时优先请求 `cjcx_list` 接口，避免重复读取静态旧页面。
-- 新成绩通知包含课程名、成绩、学分和当前所选规则下的加权绩点。
-- 启动时发送当前成绩数量和当前所选规则下的总绩点。
-- Windows GUI 会列出成绩单中的全部课程类型，可任意多选参与 GPA 的类型，并查看最近一次查询的全部成绩。
-- 支持 Windows 上的 NJUConnect / EasierConnect SOCKS5 代理。
-- 提供一键启动脚本：先启动 VPN，再启动成绩监控。
-- 默认启用低资源模式，适合较小规格的 Windows ECS。
+## 功能
 
-## Security
+- 原生 Windows GUI，一处管理 VPN、成绩监控、飞书通知和日志。
+- 复用独立 Edge 用户目录，无需从浏览器数据库提取 Cookie。
+- 默认每 60 秒请求一次成绩接口，避免反复读取静态旧页面。
+- 新成绩通知包含课程名、成绩、学分和当前总绩点。
+- 支持按课程类型设置总体绩点规则，并对单门课程设置加入或排除例外。
+- 使用 Windows DPAPI 为当前用户加密保存 VPN 密码、飞书 Webhook 和签名密钥。
+- 支持 NJUConnect / EasierConnect 提供的本地 SOCKS5 代理。
+- 支持定时重建 VPN 会话、连续隧道 `EOF` 恢复和托盘运行。
+- 低资源浏览器模式适用于小规格 Windows ECS。
 
-仓库通过 `.gitignore` 排除运行态和敏感文件：
+## 下载
 
-- `.env`
-- `vpn.env`
-- `config.json`
-- `state.json`
-- `browser-profile/`
-- `node_modules/`
-- `logs/`
-- `EasierConnect.exe`
+推荐从 [Releases](https://github.com/THexagram/Cau-Grade-Monitor/releases/latest) 下载 `CauGradeMonitor-win-x64.zip`。
 
-飞书 webhook、飞书 secret、VPN 账号密码等敏感信息应只保存在本地运行环境中。
+公开便携包包含桌面程序、Node.js 运行时和 Playwright，但不会包含：
 
-## Requirements
+- EasierConnect 或其他第三方 VPN 二进制文件
+- VPN 账号密码
+- 飞书 Webhook 或签名密钥
+- Edge 登录资料和成绩缓存
 
-- Windows Server / Windows 11
-- Microsoft Edge
-- Node.js 18 或更高版本
+解压后运行 `CauGradeMonitor.exe`。首次启动时在“设置”中选择本机的 `EasierConnect.exe`，填写 VPN 与飞书配置，再点击“启动全部”。如果当前网络可以直接访问教务系统，可以只启动成绩监控。
 
-## Windows GUI
-
-桌面端源码位于 `desktop/CauGradeMonitor.Desktop`。它统一管理 EasierConnect 与成绩监控进程，包含定时 VPN 会话轮换、连续 `EOF` 自动恢复、成绩数量与 GPA 状态展示、加密配置记忆和托盘运行。
-
-构建便携版：
-
-```powershell
-pwsh -File .\build-desktop.ps1 `
-  -EasierConnectExe C:\path\to\EasierConnect.exe `
-  -NodeDirectory C:\path\to\node-folder
-```
-
-生成结果位于 `desktop-publish/CauGradeMonitor-win-x64.zip`。公开仓库和默认构建不会包含 EasierConnect 二进制、VPN 凭据或飞书密钥。
-
-## Installation
-
-安装依赖：
-
-```powershell
-npm install
-```
-
-创建本地配置文件：
-
-```powershell
-Copy-Item .\.env.example .\.env
-Copy-Item .\config.njuconnect.example.json .\config.json
-```
-
-编辑 `.env`：
-
-```env
-FEISHU_WEBHOOK_URL=https://open.feishu.cn/open-apis/bot/v2/hook/...
-FEISHU_BOT_SECRET=
-MONITOR_PROXY_SERVER=
-```
-
-测试飞书机器人：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\test-feishu.ps1
-```
-
-## Basic Usage
-
-启动监控：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\start.ps1
-```
-
-程序会打开一个独立 Edge 窗口。需要在该窗口中完成综合服务平台登录，并进入“课程成绩查询”页面。后续查询会复用该浏览器会话。
-
-## VPN Integration
-
-使用重编译的 NJUConnect / EasierConnect 时，`EasierConnect.exe` 可放置在以下任一位置：
-
-- 仓库根目录
-- `.\NJUConnect-rebuild-windows-x64-cau-dns\EasierConnect.exe`
-- 与仓库同级的 `NJUConnect-rebuild-windows-x64-cau-dns\EasierConnect.exe`
-
-创建 VPN 配置：
-
-```powershell
-Copy-Item .\vpn.env.example .\vpn.env
-notepad .\vpn.env
-```
-
-至少配置：
-
-```env
-CAU_VPN_USERNAME=<vpn-username>
-CAU_VPN_PASSWORD=<vpn-password>
-```
-
-一键启动 VPN 和成绩监控：
+运行数据保存在：
 
 ```text
-一键启动VPN和查询.bat
+%LOCALAPPDATA%\CauGradeMonitor
 ```
 
-脚本流程：
+加密后的敏感配置只能由同一台 Windows 设备上的同一用户解密。将程序迁移到其他服务器后需要重新填写。
 
-1. 启动 `EasierConnect.exe`
-2. 等待 `127.0.0.1:1080` SOCKS5 可用
-3. 启动成绩监控程序
-4. 默认每 120 分钟重新建立 VPN 会话
-5. VPN 进程退出、SOCKS5 端口消失或隧道日志连续出现 `EOF` 时自动重连
+## 使用流程
 
-VPN 重连期间成绩监控和 Edge 不会退出。浏览器仍使用同一个 `127.0.0.1:1080` 代理地址，VPN 恢复后后续查询会自动继续。该监督逻辑只检查本地进程、端口和日志，不会额外发送网页保活请求。
+1. 启动桌面程序并填写配置。
+2. 启动 VPN，等待 SOCKS5 状态就绪。
+3. 启动成绩监控，在程序打开的独立 Edge 中完成统一身份认证。
+4. 从综合服务平台进入“课程成绩查询”页面。
+5. 保持桌面程序在运行或最小化到托盘。
 
-可在 `vpn.env` 调整自动重连：
+监控会优先请求 `cjcx_list` 接口获取最新数据。已有历史成绩时，单次请求超时或空结果不会立刻报警；默认连续 3 次失败后才提示登录或页面异常。
 
-```env
-# 定时重连间隔，单位为分钟；设为 0 可关闭
-CAU_VPN_RESTART_MINUTES=120
+## 绩点规则
 
-# 连续出现多少条隧道 EOF 后提前重连；设为 0 可关闭
-CAU_VPN_EOF_RESTART_COUNT=4
-```
+首次使用默认统计类型或属性中包含“必修”（不含“非必修”）或“体育类”的课程。桌面端提供两层规则：
 
-自定义 VPN 程序路径：
+- 课程类型多选框决定总体计入范围。
+- “全部成绩”表格中的复选框用于单独加入或排除某一门课程。
 
-```env
-CAU_VPN_EXE=C:\path\to\EasierConnect.exe
-```
+单门课程重新切换到总体规则对应的状态时，该课程例外会自动取消。所有规则会保存在当前用户配置中，并在下次启动监控时用于飞书通知和总绩点计算。
 
-需要短信验证码、TOTP 或查看 VPN 输出时：
+| 成绩 | 绩点 | 成绩 | 绩点 |
+| --- | ---: | --- | ---: |
+| A+ | 4.0 | B | 3.0 |
+| A | 4.0 | B- | 2.7 |
+| A- | 3.7 | C+ | 2.3 |
+| B+ | 3.3 | C | 2.0 |
+| D+ | 1.5 | D | 1.0 |
+| F | 0 | | |
 
-```env
-CAU_VPN_SHOW_WINDOW=true
-```
+总绩点按有效课程学分加权平均。
 
-启用可见 VPN 窗口后仍会执行定时重连和进程/端口检查，但无法从重定向日志中检测连续 `EOF`。需要人工输入的短信验证码或 TOTP 无法实现完全无人值守重连。
+## 飞书通知
 
-## Configuration
-
-`config.njuconnect.example.json` 默认只让教务域名走 SOCKS5：
-
-```json
-{
-  "proxy": {
-    "enabled": true,
-    "server": "socks5://127.0.0.1:1080",
-    "browser": false
-  },
-  "browser": {
-    "loadExtensionDir": "edge-cau-proxy-extension",
-    "args": [
-      "--host-resolver-rules=MAP newjw.cau.edu.cn 10.200.36.235,EXCLUDE localhost"
-    ]
-  }
-}
-```
-
-成绩查询本身每 60 秒访问一次服务器，因此程序不再额外执行 VPN keepalive。
-
-## GPA Calculation
-
-首次使用默认统计类型/属性包含“必修”（不含“非必修”）或“体育类”的课程，按学分加权平均。成功查询后，Windows GUI 会从成绩单中提取实际课程类型；多选下拉框用于设置整体课程类型规则，“全部成绩”表格中的“计入绩点”复选框用于单独加入或排除某一门课程。课程例外与整体规则都会保存在当前用户配置中。
-
-| 成绩 | 绩点 |
-| --- | --- |
-| A+ | 4.0 |
-| A | 4.0 |
-| A- | 3.7 |
-| B+ | 3.3 |
-| B | 3.0 |
-| B- | 2.7 |
-| C+ | 2.3 |
-| C | 2.0 |
-| D+ | 1.5 |
-| D | 1.0 |
-| F | 0 |
-
-启动后首次查到成绩时，飞书通知示例：
+启动后首次查询成功：
 
 ```text
 当前共有23科成绩，绩点为：3.72
 ```
 
-发现新成绩时，飞书通知示例：
+发现新成绩或成绩变化：
 
 ```text
 检测到新成绩或成绩变化
@@ -207,32 +86,94 @@ CAU_VPN_SHOW_WINDOW=true
 当前总绩点为：3.72
 ```
 
-## Empty Result Tolerance
+## VPN 集成
 
-已有历史成绩基线时，偶发请求超时不会立刻报警。默认连续 3 次空结果才发送登录/页面异常通知：
+程序使用 EasierConnect 兼容客户端提供的 `127.0.0.1:1080` SOCKS5 代理。默认行为包括：
 
-```json
-{
-  "emptyResultNotifyAfter": 3,
-  "emptyResultRetrySeconds": 60,
-  "requestTimeoutMs": 30000
-}
-```
+- 每 120 分钟主动建立新 VPN 会话。
+- VPN 进程退出或 SOCKS5 端口消失时自动恢复。
+- 隧道日志连续出现 4 次 `EOF` 时提前重连。
+- VPN 重连期间保留成绩监控和 Edge 登录窗口。
+- 不额外发送网页保活请求。
 
-## Scheduled Start
+需要短信验证码、TOTP 或交互式认证的 VPN 无法完全无人值守重连。
 
-仅启动成绩监控：
+## 从源码运行
+
+要求：
+
+- Windows 10、Windows 11 或 Windows Server
+- Microsoft Edge
+- Node.js 18 或更高版本
+- 构建桌面端时需要 .NET 8 SDK
+
+安装依赖并创建配置：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\create-scheduled-task.ps1
+npm install
+Copy-Item .\.env.example .\.env
+Copy-Item .\config.njuconnect.example.json .\config.json
 ```
 
-VPN 和成绩监控一起启动时，可将 Windows 计划任务指向：
+启动命令行监控：
+
+```powershell
+pwsh -ExecutionPolicy Bypass -File .\start.ps1
+```
+
+同时启动 VPN 和监控：
+
+```powershell
+pwsh -ExecutionPolicy Bypass -File .\start-vpn-and-monitor.ps1
+```
+
+也可以双击 `一键启动VPN和查询.bat`。
+
+## 构建桌面端
+
+生成包含指定 EasierConnect 的内部便携包：
+
+```powershell
+pwsh -File .\build-desktop.ps1 `
+  -EasierConnectExe C:\path\to\EasierConnect.exe
+```
+
+生成不包含第三方 VPN 二进制的公共便携包：
+
+```powershell
+pwsh -File .\build-desktop.ps1 -ExcludeEasierConnect
+```
+
+结果位于 `desktop-publish/CauGradeMonitor-win-x64.zip`。
+
+## 测试
+
+```powershell
+npm test
+npm run check
+dotnet build .\desktop\CauGradeMonitor.Desktop\CauGradeMonitor.Desktop.csproj -c Release
+```
+
+GitHub Actions 会在每次推送和 Pull Request 时运行 Node.js 测试、语法检查和 Windows 桌面端编译。
+
+## 安全
+
+`.gitignore` 会排除 `.env`、`vpn.env`、`config.json`、浏览器资料、日志、缓存、压缩包和 VPN 二进制。不要在 Issue、日志截图或提交中公开账号密码、飞书 Webhook、签名密钥、Cookie 或完整成绩单。
+
+安全问题请参阅 [SECURITY.md](SECURITY.md)。
+
+## 项目结构
 
 ```text
-一键启动VPN和查询.bat
+desktop/CauGradeMonitor.Desktop/  Windows GUI
+edge-cau-proxy-extension/         Edge 分流扩展
+monitor.js                        成绩查询与飞书通知
+start-vpn-and-monitor.ps1         VPN 与监控监督脚本
+build-desktop.ps1                 便携包构建脚本
 ```
 
-## Notes
+## 说明
 
-本仓库不包含 EasyConnect / EasierConnect 二进制文件。相关二进制文件应从可信来源获取，并遵守对应项目许可证及学校网络使用规定。
+本项目不包含 EasyConnect / EasierConnect 二进制文件。请从可信来源获取兼容客户端，并遵守对应项目许可证、学校网络规定和教务系统使用要求。
+
+当前仓库尚未指定开源许可证。未经授权，不代表可以自由复制、修改或重新分发源码。

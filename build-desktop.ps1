@@ -1,7 +1,8 @@
 param(
     [string]$OutputDirectory = (Join-Path $PSScriptRoot "desktop-publish"),
     [string]$EasierConnectExe = "",
-    [string]$NodeDirectory = ""
+    [string]$NodeDirectory = "",
+    [switch]$ExcludeEasierConnect
 )
 
 $ErrorActionPreference = "Stop"
@@ -85,7 +86,7 @@ Copy-Item -LiteralPath (Join-Path $resolvedNodeDirectory "node.exe") -Destinatio
 $nodeLicense = Join-Path $resolvedNodeDirectory "LICENSE"
 if (Test-Path -LiteralPath $nodeLicense) { Copy-Item -LiteralPath $nodeLicense -Destination $nodeTarget }
 
-$resolvedEasierConnect = Find-EasierConnect
+$resolvedEasierConnect = if ($ExcludeEasierConnect) { $null } else { Find-EasierConnect }
 if ($resolvedEasierConnect) {
     Copy-Item -LiteralPath $resolvedEasierConnect -Destination (Join-Path $runtimeDirectory "EasierConnect.exe")
     Write-Host "Included EasierConnect.exe from: $resolvedEasierConnect"

@@ -9,7 +9,7 @@ Windows GUI integrating the CAU grade monitor with an EasierConnect-compatible S
 - Preserve the managed Edge profile and login state between restarts.
 - Store the VPN password, Feishu webhook, and signing secret with Windows DPAPI for the current user.
 - Display current grade count, required and sports-course weighted GPA, service state, and recent logs.
-- Select any combination of course types for GPA calculation and browse all courses from the latest successful query.
+- Select course types as the default GPA rule, then include or exclude individual courses as exceptions.
 - Minimize to the Windows notification area for long-running operation.
 
 ## Run
@@ -32,6 +32,12 @@ Requirements: .NET 8 SDK or later, Node.js 18 or later, and `npm`.
 pwsh -File .\build-desktop.ps1 `
   -EasierConnectExe C:\path\to\EasierConnect.exe `
   -NodeDirectory C:\path\to\node-folder
+```
+
+For a public package that must not auto-discover or include an EasierConnect binary:
+
+```powershell
+pwsh -File .\build-desktop.ps1 -ExcludeEasierConnect
 ```
 
 The public repository does not include EasierConnect binaries or private configuration. Review the upstream project's terms before redistributing a compatible VPN binary.

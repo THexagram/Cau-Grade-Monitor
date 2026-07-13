@@ -1,0 +1,40 @@
+name: Bug report
+description: 报告可以稳定复现的运行问题
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: 提交前请删除账号密码、飞书 Webhook、Cookie、完整成绩单及其他个人信息。
+  - type: input
+    id: version
+    attributes:
+      label: 程序版本
+      placeholder: 例如 1.3.1
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: 出现问题的部分
+      options:
+        - Windows GUI
+        - 成绩查询
+        - VPN / SOCKS5
+        - 飞书通知
+        - 构建或安装
+        - 其他
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: 问题描述
+      description: 请说明预期行为、实际行为和复现步骤。
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 已脱敏日志
+      render: text
