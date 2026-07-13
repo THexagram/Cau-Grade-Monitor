@@ -106,6 +106,20 @@ CAU_VPN_PASSWORD=<vpn-password>
 1. 启动 `EasierConnect.exe`
 2. 等待 `127.0.0.1:1080` SOCKS5 可用
 3. 启动成绩监控程序
+4. 默认每 120 分钟重新建立 VPN 会话
+5. VPN 进程退出、SOCKS5 端口消失或隧道日志连续出现 `EOF` 时自动重连
+
+VPN 重连期间成绩监控和 Edge 不会退出。浏览器仍使用同一个 `127.0.0.1:1080` 代理地址，VPN 恢复后后续查询会自动继续。该监督逻辑只检查本地进程、端口和日志，不会额外发送网页保活请求。
+
+可在 `vpn.env` 调整自动重连：
+
+```env
+# 定时重连间隔，单位为分钟；设为 0 可关闭
+CAU_VPN_RESTART_MINUTES=120
+
+# 连续出现多少条隧道 EOF 后提前重连；设为 0 可关闭
+CAU_VPN_EOF_RESTART_COUNT=4
+```
 
 自定义 VPN 程序路径：
 
@@ -118,6 +132,8 @@ CAU_VPN_EXE=C:\path\to\EasierConnect.exe
 ```env
 CAU_VPN_SHOW_WINDOW=true
 ```
+
+启用可见 VPN 窗口后仍会执行定时重连和进程/端口检查，但无法从重定向日志中检测连续 `EOF`。需要人工输入的短信验证码或 TOTP 无法实现完全无人值守重连。
 
 ## Configuration
 
