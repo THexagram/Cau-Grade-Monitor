@@ -4,6 +4,8 @@
 
 ## Features
 
+- 提供原生 Windows GUI，将 VPN、成绩监控、飞书通知和运行日志集中到一个窗口。
+- GUI 使用 Windows 当前用户加密保存 VPN 密码、飞书 Webhook 和签名密钥，并复用独立 Edge 登录状态。
 - 每 60 秒请求一次成绩接口。
 - 复用独立 Edge 浏览器登录态，不依赖 Cookie 提取。
 - 查询时优先请求 `cjcx_list` 接口，避免重复读取静态旧页面。
@@ -33,6 +35,20 @@
 - Windows Server / Windows 11
 - Microsoft Edge
 - Node.js 18 或更高版本
+
+## Windows GUI
+
+桌面端源码位于 `desktop/CauGradeMonitor.Desktop`。它统一管理 EasierConnect 与成绩监控进程，包含定时 VPN 会话轮换、连续 `EOF` 自动恢复、成绩数量与 GPA 状态展示、加密配置记忆和托盘运行。
+
+构建便携版：
+
+```powershell
+pwsh -File .\build-desktop.ps1 `
+  -EasierConnectExe C:\path\to\EasierConnect.exe `
+  -NodeDirectory C:\path\to\node-folder
+```
+
+生成结果位于 `desktop-publish/CauGradeMonitor-win-x64.zip`。公开仓库和默认构建不会包含 EasierConnect 二进制、VPN 凭据或飞书密钥。
 
 ## Installation
 

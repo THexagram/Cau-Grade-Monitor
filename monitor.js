@@ -7,6 +7,7 @@ const { chromium } = require('playwright-core');
 
 const ROOT = __dirname;
 const DEFAULT_CONFIG = 'config.json';
+const GUI_EVENT_PREFIX = '@@CAU_EVENT@@';
 const DEFAULT_LOW_RESOURCE_VIEWPORT = { width: 1100, height: 720 };
 const DEFAULT_BROWSER_ARGS = [
   '--disable-background-networking',
@@ -41,6 +42,11 @@ function log(message) {
   console.log(`[${nowText()}] ${message}`);
 }
 
+function emitGuiEvent(type, data = {}) {
+  if (process.env.CAU_GUI_EVENTS !== '1') return;
+  console.log(`${GUI_EVENT_PREFIX}${JSON.stringify({ type, timestamp: new Date().toISOString(), ...data })}`);
+}
+
 function readJson(file) {
   return JSON.parse(fs.readFileSync(file, 'utf8'));
 }
@@ -71,12 +77,14 @@ function parseArgs(argv) {
   const args = {
     config: path.join(ROOT, DEFAULT_CONFIG),
     once: false,
-    testFeishu: false
+    testFeishu: false,
+    noPrompt: false
   };
   for (let i = 2; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '--once') args.once = true;
     else if (arg === '--test-feishu') args.testFeishu = true;
+    else if (arg === '--no-prompt') args.noPrompt = true;
     else if (arg === '--config') {
       i += 1;
       args.config = path.resolve(argv[i]);
@@ -726,6 +734,7 @@ async function runMonitor(config, options) {
 
   const startUrl = config.manualLogin ? (config.loginUrl || config.gradeUrl) : config.gradeUrl;
   log('Browser started.');
+  emitGuiEvent('browser_started', { url: startUrl });
   if (config.manualLogin) {
     log('Manual login mode: log in through the opened portal page, then open the grade query page in this same browser window.');
   } else {
@@ -774,6 +783,11 @@ async function runMonitor(config, options) {
           await sendFeishu(config, `[Grade Monitor] Login/navigation needed\n${message}`);
           lastErrorNotifyAt = now;
         }
+        emitGuiEvent('login_needed', {
+          emptyResultStreak,
+          previousRows: hasBaseline ? state.rows.length : 0,
+          source: result.source
+        });
         return { ok: false, rows: 0, nextSleepSeconds, message };
       }
 
@@ -792,6 +806,14 @@ async function runMonitor(config, options) {
 
       const gpaInfo = calculateRequiredGpa(rows);
       const startupSummary = formatStartupSummary(rows, gpaInfo);
+      emitGuiEvent('snapshot', {
+        rows: rows.length,
+        gpa: gpaInfo.formatted,
+        required: gpaInfo.required,
+        countedRequired: gpaInfo.counted,
+        credits: gpaInfo.credits,
+        source: result.source
+      });
       async function sendStartupSummaryOnce() {
         if (config.feishu.notifyOnStart && !startupNotified) {
           await sendFeishu(config, startupSummary);
@@ -822,6 +844,16 @@ async function runMonitor(config, options) {
             lines.length > 30 ? `... ${lines.length - 30} more` : ''
           ].filter(Boolean).join('\n');
           log(text);
+          emitGuiEvent('grades_changed', {
+            count: changes.length,
+            courses: changes.slice(0, 30).map((change) => ({
+              type: change.type,
+              name: change.row.name,
+              score: change.row.score,
+              oldScore: change.oldScore || '',
+              credit: change.row.credit || ''
+            }))
+          });
           await sendFeishu(config, text);
           saveState(config.stateFile, rows);
           state = loadState(config.stateFile);
@@ -840,6 +872,7 @@ async function runMonitor(config, options) {
       }
     } catch (error) {
       log(`Check failed: ${error.stack || error.message}`);
+      emitGuiEvent('check_failed', { message: error.message });
       const now = Date.now();
       if (reason !== 'scheduled' || now - lastErrorNotifyAt > config.errorNotifyCooldownSeconds * 1000) {
         await sendFeishu(config, `[Grade Monitor] Check failed\n${error.message}\nTime: ${nowText()}`).catch((sendError) => {
@@ -875,7 +908,7 @@ async function main() {
     return;
   }
 
-  if (!config.feishu.webhook) {
+  if (!config.feishu.webhook && !args.noPrompt) {
     log('WARNING: FEISHU_WEBHOOK_URL is empty. Notifications will be skipped.');
     await askEnter('Press Enter to continue anyway, or Ctrl+C to stop...');
   }
@@ -884,6 +917,7 @@ async function main() {
 }
 
 main().catch((error) => {
+  emitGuiEvent('fatal', { message: error.message });
   console.error(error.stack || error.message);
   process.exitCode = 1;
 });
