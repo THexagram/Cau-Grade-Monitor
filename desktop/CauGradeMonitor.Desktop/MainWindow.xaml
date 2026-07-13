@@ -374,12 +374,49 @@
                                         <TextBlock Text="成绩监控" Style="{StaticResource SectionTitle}" />
                                         <TextBlock Text="查询间隔（秒）" Style="{StaticResource FieldLabel}" />
                                         <TextBox x:Name="PollIntervalText" />
-                                        <TextBlock Text="绩点统计范围" Style="{StaticResource FieldLabel}" Margin="0,14,0,5" />
-                                        <ComboBox x:Name="GpaScopeCombo">
-                                            <ComboBoxItem Content="仅必修" Tag="required" />
-                                            <ComboBoxItem Content="必修 + 体育类" Tag="required_and_sports" />
-                                            <ComboBoxItem Content="全部可换算课程" Tag="all" />
-                                        </ComboBox>
+                                        <TextBlock Text="计入绩点的课程类型" Style="{StaticResource FieldLabel}" Margin="0,14,0,5" />
+                                        <Grid>
+                                            <ToggleButton x:Name="GpaTypesToggle" HorizontalContentAlignment="Stretch">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock x:Name="GpaTypesSummaryText" Text="成功查询后加载类型" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                                    <TextBlock Grid.Column="1" FontFamily="Segoe Fluent Icons" Text="&#xE70D;" Foreground="{StaticResource MutedTextBrush}" Margin="10,0,0,0" VerticalAlignment="Center" />
+                                                </Grid>
+                                            </ToggleButton>
+                                            <Popup PlacementTarget="{Binding ElementName=GpaTypesToggle}" Placement="Bottom" VerticalOffset="4"
+                                                   IsOpen="{Binding IsChecked, ElementName=GpaTypesToggle, Mode=TwoWay}"
+                                                   StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+                                                <Border Width="{Binding ActualWidth, ElementName=GpaTypesToggle}" MinWidth="280" MaxHeight="310"
+                                                        Background="White" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                                                        CornerRadius="6" Padding="12">
+                                                    <Grid>
+                                                        <Grid.RowDefinitions>
+                                                            <RowDefinition Height="Auto" />
+                                                            <RowDefinition Height="*" />
+                                                            <RowDefinition Height="Auto" />
+                                                        </Grid.RowDefinitions>
+                                                        <TextBlock Text="选择参与 GPA 计算的类型" FontWeight="SemiBold" Margin="2,0,2,10" />
+                                                        <ScrollViewer Grid.Row="1" MaxHeight="210" VerticalScrollBarVisibility="Auto">
+                                                            <StackPanel x:Name="GpaTypesList" />
+                                                        </ScrollViewer>
+                                                        <Grid Grid.Row="2" Margin="0,10,0,0">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                                <ColumnDefinition Width="8" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Text="保存后重启生效" Foreground="{StaticResource MutedTextBrush}" FontSize="11" VerticalAlignment="Center" />
+                                                            <Button Grid.Column="1" Content="清空" Click="ClearGpaTypes_Click" MinHeight="28" Padding="10,4" />
+                                                            <Button Grid.Column="3" Content="全选" Click="SelectAllGpaTypes_Click" MinHeight="28" Padding="10,4" />
+                                                        </Grid>
+                                                    </Grid>
+                                                </Border>
+                                            </Popup>
+                                        </Grid>
                                         <TextBlock Text="统一身份认证入口" Style="{StaticResource FieldLabel}" Margin="0,14,0,5" />
                                         <TextBox x:Name="LoginUrlText" />
                                         <TextBlock Text="成绩页面" Style="{StaticResource FieldLabel}" Margin="0,14,0,5" />

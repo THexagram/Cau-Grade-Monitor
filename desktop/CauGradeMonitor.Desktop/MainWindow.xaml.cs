@@ -16,10 +16,14 @@ public partial class MainWindow : Window
     private readonly SettingsStore _settingsStore = new();
     private readonly ProcessSupervisor _supervisor = new();
     private readonly List<string> _logLines = [];
+    private readonly List<string> _availableGpaTypes = [];
+    private readonly HashSet<string> _selectedGpaTypes = new(StringComparer.Ordinal);
     private AppSettings _settings = new();
     private Forms.NotifyIcon? _trayIcon;
     private bool _allowClose;
     private bool _busy;
+    private bool _gpaTypesConfigured;
+    private bool _updatingGpaTypes;
 
     public MainWindow()
     {
@@ -253,8 +257,16 @@ public partial class MainWindow : Window
         RestartMinutesText.Text = settings.VpnRestartMinutes.ToString();
         EofCountText.Text = settings.EofRestartCount.ToString();
         PollIntervalText.Text = settings.PollIntervalSeconds.ToString();
-        SelectGpaScope(settings.GpaScope);
-        GpaScopeMetricLabel.Text = GpaScopeLabel(settings.GpaScope);
+        _gpaTypesConfigured = settings.GpaSelectedTypesConfigured;
+        _selectedGpaTypes.Clear();
+        foreach (var type in settings.GpaSelectedTypes ?? [])
+        {
+            if (!string.IsNullOrWhiteSpace(type)) _selectedGpaTypes.Add(type.Trim());
+        }
+        RefreshGpaTypeSelector();
+        GpaScopeMetricLabel.Text = _gpaTypesConfigured
+            ? SelectedTypesLabel(_selectedGpaTypes)
+            : GpaScopeLabel(settings.GpaScope);
         LoginUrlText.Text = settings.LoginUrl;
         GradeUrlText.Text = settings.GradeUrl;
         ListUrlText.Text = settings.ListUrl;
@@ -270,6 +282,8 @@ public partial class MainWindow : Window
 
     private AppSettings ReadSettingsFromForm()
     {
+        var selectedTypesConfigured = _gpaTypesConfigured || _availableGpaTypes.Count > 0;
+        _gpaTypesConfigured = selectedTypesConfigured;
         var settings = new AppSettings
         {
             RememberSecrets = RememberSecretsCheck.IsChecked == true,
@@ -285,7 +299,9 @@ public partial class MainWindow : Window
             VpnRestartMinutes = ParseInteger(RestartMinutesText.Text, "VPN 重连间隔", 0, 10080),
             EofRestartCount = ParseInteger(EofCountText.Text, "EOF 阈值", 0, 100),
             PollIntervalSeconds = ParseInteger(PollIntervalText.Text, "查询间隔", 30, 86400),
-            GpaScope = SelectedGpaScope(),
+            GpaScope = string.IsNullOrWhiteSpace(_settings.GpaScope) ? "required_and_sports" : _settings.GpaScope,
+            GpaSelectedTypesConfigured = selectedTypesConfigured,
+            GpaSelectedTypes = _selectedGpaTypes.Order(StringComparer.Ordinal).ToList(),
             LoginUrl = Required(LoginUrlText.Text, "统一身份认证入口"),
             GradeUrl = Required(GradeUrlText.Text, "成绩页面"),
             ListUrl = Required(ListUrlText.Text, "成绩查询接口"),
@@ -298,17 +314,97 @@ public partial class MainWindow : Window
         return settings;
     }
 
-    private void SelectGpaScope(string scope)
+    private void RefreshGpaTypeSelector()
     {
-        GpaScopeCombo.SelectedItem = GpaScopeCombo.Items
-            .OfType<ComboBoxItem>()
-            .FirstOrDefault(item => string.Equals(item.Tag?.ToString(), scope, StringComparison.Ordinal))
-            ?? GpaScopeCombo.Items[1];
+        _updatingGpaTypes = true;
+        try
+        {
+            GpaTypesList.Children.Clear();
+            var displayTypes = _availableGpaTypes
+                .Concat(_selectedGpaTypes)
+                .Distinct(StringComparer.Ordinal)
+                .Order(StringComparer.Ordinal)
+                .ToList();
+            foreach (var type in displayTypes)
+            {
+                var checkBox = new CheckBox
+                {
+                    Content = type,
+                    Tag = type,
+                    IsChecked = _selectedGpaTypes.Contains(type),
+                    Margin = new Thickness(2, 4, 2, 4)
+                };
+                checkBox.Checked += GpaTypeSelectionChanged;
+                checkBox.Unchecked += GpaTypeSelectionChanged;
+                GpaTypesList.Children.Add(checkBox);
+            }
+        }
+        finally
+        {
+            _updatingGpaTypes = false;
+        }
+        UpdateGpaTypesSummary();
     }
 
-    private string SelectedGpaScope()
+    private void GpaTypeSelectionChanged(object sender, RoutedEventArgs e)
     {
-        return (GpaScopeCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "required_and_sports";
+        if (_updatingGpaTypes || sender is not CheckBox { Tag: string type } checkBox) return;
+        if (checkBox.IsChecked == true) _selectedGpaTypes.Add(type);
+        else _selectedGpaTypes.Remove(type);
+        _gpaTypesConfigured = true;
+        UpdateGpaTypesSummary();
+    }
+
+    private void SelectAllGpaTypes_Click(object sender, RoutedEventArgs e)
+    {
+        _selectedGpaTypes.Clear();
+        foreach (var type in _availableGpaTypes) _selectedGpaTypes.Add(type);
+        _gpaTypesConfigured = true;
+        RefreshGpaTypeSelector();
+    }
+
+    private void ClearGpaTypes_Click(object sender, RoutedEventArgs e)
+    {
+        _selectedGpaTypes.Clear();
+        _gpaTypesConfigured = true;
+        RefreshGpaTypeSelector();
+    }
+
+    private void UpdateGpaTypesSummary()
+    {
+        GpaTypesSummaryText.Text = _availableGpaTypes.Count == 0 && _selectedGpaTypes.Count == 0
+            ? "成功查询后加载类型"
+            : _selectedGpaTypes.Count == 0
+                ? "未选择任何类型"
+                : _selectedGpaTypes.Count <= 2
+                    ? string.Join("、", _selectedGpaTypes.Order(StringComparer.Ordinal))
+                    : $"已选择 {_selectedGpaTypes.Count} 个类型";
+    }
+
+    private void UpdateAvailableGpaTypes(IReadOnlyList<GradeCourse> courses, GradeSnapshot snapshot)
+    {
+        _availableGpaTypes.Clear();
+        _availableGpaTypes.AddRange(courses
+            .Select(course => course.Type)
+            .Where(type => !string.IsNullOrWhiteSpace(type))
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal));
+
+        if (!_gpaTypesConfigured && snapshot.GpaScope == "selected_types")
+        {
+            _selectedGpaTypes.Clear();
+            foreach (var type in snapshot.SelectedTypes ?? []) _selectedGpaTypes.Add(type);
+            _gpaTypesConfigured = true;
+        }
+        else if (!_gpaTypesConfigured && _selectedGpaTypes.Count == 0)
+        {
+            foreach (var type in courses.Where(course => course.IncludedInGpa).Select(course => course.Type))
+            {
+                _selectedGpaTypes.Add(type);
+            }
+        }
+
+        RefreshGpaTypeSelector();
     }
 
     private static string GpaScopeLabel(string scope) => scope switch
@@ -317,6 +413,18 @@ public partial class MainWindow : Window
         "all" => "全部可换算课程绩点",
         _ => "必修及体育绩点"
     };
+
+    private static string SelectedTypesLabel(IEnumerable<string>? selectedTypes)
+    {
+        var types = selectedTypes?.Where(type => !string.IsNullOrWhiteSpace(type)).Distinct(StringComparer.Ordinal).ToList() ?? [];
+        if (types.Count == 0) return "未选择类型绩点";
+        var joined = string.Join(" + ", types);
+        return types.Count <= 2 && joined.Length <= 12 ? $"{joined}绩点" : $"已选 {types.Count} 类绩点";
+    }
+
+    private static string SnapshotGpaLabel(GradeSnapshot snapshot) => snapshot.GpaScope == "selected_types"
+        ? SelectedTypesLabel(snapshot.SelectedTypes)
+        : GpaScopeLabel(snapshot.GpaScope);
 
     private static int ParseInteger(string value, string fieldName, int minimum, int maximum)
     {
@@ -352,9 +460,10 @@ public partial class MainWindow : Window
     private void RenderSnapshot(GradeSnapshot snapshot)
     {
         var courses = snapshot.Courses ?? [];
+        UpdateAvailableGpaTypes(courses, snapshot);
         CoursesMetricText.Text = snapshot.Rows.ToString();
         GpaMetricText.Text = snapshot.Gpa;
-        GpaScopeMetricLabel.Text = GpaScopeLabel(snapshot.GpaScope);
+        GpaScopeMetricLabel.Text = SnapshotGpaLabel(snapshot);
         RequiredMetricText.Text = $"{snapshot.CountedRequired}/{snapshot.Required}";
         CreditsMetricText.Text = $"{snapshot.Credits:0.##} 学分";
         LastCheckMetricText.Text = snapshot.CheckedAt.ToString("HH:mm");
@@ -363,7 +472,7 @@ public partial class MainWindow : Window
         GradesSummaryText.Text = courses.Count > 0
             ? $"共 {snapshot.Rows} 科 | 计入绩点 {snapshot.CountedRequired} 科 | {snapshot.Credits:0.##} 学分"
             : "当前缓存没有课程明细，成功查询后会自动显示";
-        GradesUpdatedText.Text = $"{GpaScopeLabel(snapshot.GpaScope)} | {snapshot.CheckedAt:yyyy-MM-dd HH:mm:ss}";
+        GradesUpdatedText.Text = $"{SnapshotGpaLabel(snapshot)} | {snapshot.CheckedAt:yyyy-MM-dd HH:mm:ss}";
         ActionStatusText.Text = "最近查询正常";
     }
 

@@ -15,7 +15,9 @@
     "loginNeededEverySeconds": 300
   },
   "gpa": {
-    "scope": "required_and_sports"
+    "scope": "required_and_sports",
+    "useSelectedTypes": false,
+    "selectedTypes": []
   },
   "stateFile": "state.json",
   "guiSnapshotFile": "gui-snapshot.json",

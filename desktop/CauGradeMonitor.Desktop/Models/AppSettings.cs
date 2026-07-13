@@ -21,6 +21,8 @@ public sealed class AppSettings
 
     public int PollIntervalSeconds { get; set; } = 60;
     public string GpaScope { get; set; } = "required_and_sports";
+    public bool GpaSelectedTypesConfigured { get; set; }
+    public List<string> GpaSelectedTypes { get; set; } = [];
     public string LoginUrl { get; set; } = "https://one.cau.edu.cn/tp_up/view?m=up#act=portal/viewhome";
     public string GradeUrl { get; set; } = "https://newjw.cau.edu.cn/jsxsd/kscj/cjcx_frm";
     public string ListUrl { get; set; } = "https://newjw.cau.edu.cn/jsxsd/kscj/cjcx_list";

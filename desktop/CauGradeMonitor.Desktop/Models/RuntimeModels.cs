@@ -35,6 +35,7 @@ public sealed record GradeSnapshot(
     string Source,
     DateTimeOffset CheckedAt,
     IReadOnlyList<GradeCourse>? Courses = null,
-    string GpaScope = "required_and_sports");
+    string GpaScope = "required_and_sports",
+    IReadOnlyList<string>? SelectedTypes = null);
 
 public sealed record LogEntry(DateTimeOffset Timestamp, string Source, string Message, ServicePhase Level);

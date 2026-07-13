@@ -393,6 +393,7 @@ public sealed class ProcessSupervisor : IAsyncDisposable
                 case "snapshot":
                     _lastCheckAt = DateTimeOffset.Now;
                     List<GradeCourse> courses;
+                    List<string> selectedTypes = [];
                     if (root.TryGetProperty("courses", out var inlineCourses) && inlineCourses.ValueKind == JsonValueKind.Array)
                     {
                         courses = ReadCourses(inlineCourses);
@@ -404,7 +405,9 @@ public sealed class ProcessSupervisor : IAsyncDisposable
                     }
                     else
                     {
-                        courses = ReadCourseSnapshotFile();
+                        var courseSnapshot = ReadCourseSnapshotFile();
+                        courses = courseSnapshot.Courses;
+                        selectedTypes = courseSnapshot.SelectedTypes;
                         var expectedCourseCount = root.TryGetProperty("courseCount", out var countElement) && countElement.TryGetInt32(out var count)
                             ? count
                             : root.GetProperty("rows").GetInt32();
@@ -422,7 +425,8 @@ public sealed class ProcessSupervisor : IAsyncDisposable
                         root.GetProperty("source").GetString() ?? "",
                         _lastCheckAt.Value,
                         courses,
-                        ReadJsonString(root, "gpaScope", "required_and_sports"));
+                        ReadJsonString(root, "gpaScope", "required_and_sports"),
+                        selectedTypes);
                     SnapshotStore.Save(snapshot);
                     SnapshotChanged?.Invoke(snapshot);
                     UpdateStatus(Status.VpnPhase, Status.VpnText, ServicePhase.Running, "监测正常");
@@ -454,19 +458,28 @@ public sealed class ProcessSupervisor : IAsyncDisposable
             : fallback;
     }
 
-    private static List<GradeCourse> ReadCourseSnapshotFile()
+    private static CourseSnapshotData ReadCourseSnapshotFile()
     {
         try
         {
-            if (!File.Exists(AppPaths.MonitorGuiSnapshotFile)) return [];
+            if (!File.Exists(AppPaths.MonitorGuiSnapshotFile)) return new([], []);
             using var document = JsonDocument.Parse(File.ReadAllText(AppPaths.MonitorGuiSnapshotFile));
-            return document.RootElement.TryGetProperty("courses", out var courses) && courses.ValueKind == JsonValueKind.Array
-                ? ReadCourses(courses)
+            var courses = document.RootElement.TryGetProperty("courses", out var courseElements) && courseElements.ValueKind == JsonValueKind.Array
+                ? ReadCourses(courseElements)
                 : [];
+            var selectedTypes = document.RootElement.TryGetProperty("selectedTypes", out var typeElements) && typeElements.ValueKind == JsonValueKind.Array
+                ? typeElements.EnumerateArray()
+                    .Where(type => type.ValueKind == JsonValueKind.String)
+                    .Select(type => type.GetString() ?? "")
+                    .Where(type => !string.IsNullOrWhiteSpace(type))
+                    .Distinct(StringComparer.Ordinal)
+                    .ToList()
+                : [];
+            return new(courses, selectedTypes);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException)
         {
-            return [];
+            return new([], []);
         }
     }
 
@@ -486,6 +499,8 @@ public sealed class ProcessSupervisor : IAsyncDisposable
         }
         return courses;
     }
+
+    private sealed record CourseSnapshotData(List<GradeCourse> Courses, List<string> SelectedTypes);
 
     private async Task StopProcessesAsync()
     {

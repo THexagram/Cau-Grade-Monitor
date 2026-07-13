@@ -29,7 +29,9 @@ public static class MonitorConfigWriter
             },
             gpa = new
             {
-                scope = settings.GpaScope
+                scope = settings.GpaScope,
+                useSelectedTypes = settings.GpaSelectedTypesConfigured,
+                selectedTypes = settings.GpaSelectedTypes
             },
             stateFile = AppPaths.MonitorStateFile,
             guiSnapshotFile = AppPaths.MonitorGuiSnapshotFile,

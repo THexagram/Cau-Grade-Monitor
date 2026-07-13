@@ -155,6 +155,10 @@ function loadConfig(configPath) {
   if (!['required', 'required_and_sports', 'all'].includes(config.gpa.scope)) {
     config.gpa.scope = 'required_and_sports';
   }
+  config.gpa.useSelectedTypes = config.gpa.useSelectedTypes === true;
+  config.gpa.selectedTypes = Array.isArray(config.gpa.selectedTypes)
+    ? [...new Set(config.gpa.selectedTypes.map(normalize).filter(Boolean))]
+    : [];
   config.stateFile = resolvePathMaybe(base, config.stateFile || 'state.json');
   config.guiSnapshotFile = resolvePathMaybe(base, config.guiSnapshotFile || 'gui-snapshot.json');
   config.browser = config.browser || {};
@@ -314,7 +318,12 @@ function hasSportsMarker(value) {
   return normalize(value).includes('体育类');
 }
 
-function isIncludedGpaRow(row, scope = 'required_and_sports') {
+function courseTypeForRow(row) {
+  return normalize(row.type || row.property || row.group || row.category || row.nature) || '未分类';
+}
+
+function isIncludedGpaRow(row, scope = 'required_and_sports', selectedTypes = null) {
+  if (Array.isArray(selectedTypes)) return selectedTypes.includes(courseTypeForRow(row));
   if (scope === 'all') return true;
   const markers = [row.type, row.property, row.nature, row.category, row.group];
   const isIncluded = scope === 'required'
@@ -328,14 +337,14 @@ function formatGpa(gpa) {
   return gpa === null ? '暂无可计算绩点' : gpa.toFixed(2);
 }
 
-function calculateRequiredGpa(rows, scope = 'required_and_sports') {
+function calculateRequiredGpa(rows, scope = 'required_and_sports', selectedTypes = null) {
   let weightedPoints = 0;
   let totalCredits = 0;
   let counted = 0;
   let required = 0;
 
   for (const row of rows) {
-    if (!isIncludedGpaRow(row, scope)) continue;
+    if (!isIncludedGpaRow(row, scope, selectedTypes)) continue;
     required += 1;
     const credit = parseCredit(row.credit);
     const gradePoint = gradePointForScore(row.score);
@@ -355,15 +364,15 @@ function calculateRequiredGpa(rows, scope = 'required_and_sports') {
   };
 }
 
-function buildGuiCourses(rows, scope) {
+function buildGuiCourses(rows, scope, selectedTypes = null) {
   return rows.map((row) => ({
     term: row.term || '',
     code: row.code || '',
     name: row.name || '',
     credit: row.credit || '',
     score: row.score || '',
-    type: row.type || row.property || row.group || '',
-    includedInGpa: isIncludedGpaRow(row, scope) &&
+    type: courseTypeForRow(row),
+    includedInGpa: isIncludedGpaRow(row, scope, selectedTypes) &&
       parseCredit(row.credit) !== null && gradePointForScore(row.score) !== null
   }));
 }
@@ -845,14 +854,17 @@ async function runMonitor(config, options) {
       }
       await closeExtraPages(context, page, config);
 
-      const gpaInfo = calculateRequiredGpa(rows, config.gpa.scope);
+      const selectedTypes = config.gpa.useSelectedTypes ? config.gpa.selectedTypes : null;
+      const effectiveGpaScope = selectedTypes ? 'selected_types' : config.gpa.scope;
+      const gpaInfo = calculateRequiredGpa(rows, config.gpa.scope, selectedTypes);
       const startupSummary = formatStartupSummary(rows, gpaInfo);
-      const guiCourses = buildGuiCourses(rows, config.gpa.scope);
+      const guiCourses = buildGuiCourses(rows, config.gpa.scope, selectedTypes);
       let courseSnapshotWritten = false;
       try {
         writeJsonAtomic(config.guiSnapshotFile, {
           updatedAt: new Date().toISOString(),
-          gpaScope: config.gpa.scope,
+          gpaScope: effectiveGpaScope,
+          selectedTypes: selectedTypes || [],
           courses: guiCourses
         });
         courseSnapshotWritten = true;
@@ -866,7 +878,7 @@ async function runMonitor(config, options) {
         countedRequired: gpaInfo.counted,
         credits: gpaInfo.credits,
         source: result.source,
-        gpaScope: config.gpa.scope,
+        gpaScope: effectiveGpaScope,
         courseCount: guiCourses.length,
         courseSnapshotWritten
       });
@@ -979,5 +991,5 @@ if (require.main === module) {
     process.exitCode = 1;
   });
 } else {
-  module.exports = { buildGuiCourses, calculateRequiredGpa, isIncludedGpaRow, loadConfig, writeJsonAtomic };
+  module.exports = { buildGuiCourses, calculateRequiredGpa, courseTypeForRow, isIncludedGpaRow, loadConfig, writeJsonAtomic };
 }
