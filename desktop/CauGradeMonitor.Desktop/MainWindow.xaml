@@ -250,7 +250,7 @@
                                     <TextBlock Text="最近活动" Style="{StaticResource SectionTitle}" />
                                     <Button Grid.Column="1" Content="查看全部" Click="ShowLogs_Click" MinHeight="28" Padding="10,4" />
                                 </Grid>
-                                <TextBox x:Name="RecentLogText" Grid.Row="1" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True"
+                                <TextBox x:Name="RecentLogText" Grid.Row="1" IsReadOnly="True" IsUndoEnabled="False" UndoLimit="0" TextWrapping="Wrap" AcceptsReturn="True"
                                          VerticalScrollBarVisibility="Auto" Background="#F8FAF9" BorderThickness="0" Padding="12"
                                          FontFamily="Cascadia Mono, Consolas, Microsoft YaHei UI" FontSize="12" />
                             </Grid>
@@ -506,7 +506,7 @@
                         <Button Grid.Column="2" Content="打开日志目录" Click="OpenLogsFolder_Click" />
                     </Grid>
                     <Border Grid.Row="1" Background="White" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="6" Padding="0">
-                        <TextBox x:Name="FullLogText" IsReadOnly="True" TextWrapping="NoWrap" AcceptsReturn="True"
+                        <TextBox x:Name="FullLogText" IsReadOnly="True" IsUndoEnabled="False" UndoLimit="0" TextWrapping="NoWrap" AcceptsReturn="True"
                                  HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" BorderThickness="0"
                                  Background="#101612" Foreground="#D6E0D9" Padding="16"
                                  FontFamily="Cascadia Mono, Consolas, Microsoft YaHei UI" FontSize="12" />

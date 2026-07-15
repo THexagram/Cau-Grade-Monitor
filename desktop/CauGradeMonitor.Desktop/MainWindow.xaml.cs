@@ -83,6 +83,7 @@ public partial class MainWindow : Window
         Show();
         WindowState = WindowState.Normal;
         Activate();
+        RenderVisibleLogs();
     }
 
     private async Task ExitApplicationAsync()
@@ -99,6 +100,7 @@ public partial class MainWindow : Window
         if (!_allowClose && _settings.MinimizeToTray)
         {
             e.Cancel = true;
+            ReleaseLogViews();
             Hide();
             _trayIcon?.ShowBalloonTip(2500, "CAU 成绩守望", "程序仍在后台运行。可双击托盘图标重新打开。", Forms.ToolTipIcon.Info);
             return;
@@ -132,6 +134,7 @@ public partial class MainWindow : Window
             "Logs" => ("运行日志", "查看 VPN 重连与成绩查询的完整过程"),
             _ => ("运行总览", "查看连接、成绩与通知状态")
         };
+        RenderVisibleLogs();
     }
 
     private static void SetNavSelected(System.Windows.Controls.Button button, bool selected)
@@ -701,10 +704,36 @@ public partial class MainWindow : Window
         var line = $"[{entry.Timestamp:HH:mm:ss}] [{entry.Source}] {entry.Message}";
         _logLines.Add(line);
         if (_logLines.Count > 500) _logLines.RemoveRange(0, _logLines.Count - 500);
-        FullLogText.Text = string.Join(Environment.NewLine, _logLines);
-        FullLogText.ScrollToEnd();
-        RecentLogText.Text = string.Join(Environment.NewLine, _logLines.TakeLast(12));
-        RecentLogText.ScrollToEnd();
+        if (IsVisible) RenderVisibleLogs();
+    }
+
+    private void RenderVisibleLogs()
+    {
+        if (LogsPanel.Visibility == Visibility.Visible)
+        {
+            FullLogText.Text = string.Join(Environment.NewLine, _logLines);
+            FullLogText.ScrollToEnd();
+        }
+        else if (FullLogText.Text.Length > 0)
+        {
+            FullLogText.Clear();
+        }
+
+        if (DashboardPanel.Visibility == Visibility.Visible)
+        {
+            RecentLogText.Text = string.Join(Environment.NewLine, _logLines.TakeLast(12));
+            RecentLogText.ScrollToEnd();
+        }
+        else if (RecentLogText.Text.Length > 0)
+        {
+            RecentLogText.Clear();
+        }
+    }
+
+    private void ReleaseLogViews()
+    {
+        FullLogText.Clear();
+        RecentLogText.Clear();
     }
 
     private static System.Windows.Media.Brush PhaseBrush(ServicePhase phase)
