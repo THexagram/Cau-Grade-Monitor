@@ -8,6 +8,7 @@ state.json
 
 browser-profile/
 logs/
+*Diagnostics*.zip
 *.log
 npm-debug.log*
 

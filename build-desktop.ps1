@@ -95,6 +95,8 @@ if ($resolvedEasierConnect) {
 }
 
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot "desktop\README.md") -Destination (Join-Path $publishDirectory "README.md")
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot "collect-crash-diagnostics.ps1") -Destination $publishDirectory
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot "enable-kernel-dump.ps1") -Destination $publishDirectory
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 [IO.Compression.ZipFile]::CreateFromDirectory($publishDirectory, $zipPath, [IO.Compression.CompressionLevel]::Optimal, $false)

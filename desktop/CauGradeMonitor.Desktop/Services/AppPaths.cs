@@ -13,6 +13,7 @@ public static class AppPaths
     public static string SnapshotFile => Path.Combine(DataDirectory, "last-snapshot.json");
     public static string BrowserProfileDirectory => Path.Combine(DataDirectory, "browser-profile");
     public static string LogsDirectory => Path.Combine(DataDirectory, "logs");
+    public static string ResourceTelemetryFile => Path.Combine(LogsDirectory, $"resources-{DateTime.Now:yyyyMMdd}.csv");
     public static string RuntimeDirectory => Path.Combine(AppContext.BaseDirectory, "runtime");
 
     public static void EnsureCreated()

@@ -20,6 +20,7 @@ public sealed class ProcessSupervisor : IAsyncDisposable
     private string? _vpnExecutable;
     private DateTimeOffset? _vpnConnectedAt;
     private DateTimeOffset? _lastCheckAt;
+    private DateTimeOffset? _lastResourceSampleAt;
     private TaskCompletionSource<bool>? _vpnReadySignal;
     private int _eofFailureCount;
     private int _vpnRestartRequested;
@@ -56,6 +57,7 @@ public sealed class ProcessSupervisor : IAsyncDisposable
                 await EnsureSocksPortAvailableAsync(settings, _runCancellation.Token);
                 await StartVpnAsync(_runCancellation.Token);
                 await StartMonitorAsync(_runCancellation.Token);
+                RecordResourceTelemetry("services_started");
                 _supervisorTask = SuperviseAsync(_runCancellation.Token);
             }
             catch
@@ -102,6 +104,7 @@ public sealed class ProcessSupervisor : IAsyncDisposable
             _runCancellation = null;
             _vpnConnectedAt = null;
             _lastCheckAt = null;
+            _lastResourceSampleAt = null;
             UpdateStatus(ServicePhase.Stopped, "未连接", ServicePhase.Stopped, "未运行");
             WriteLog("系统", "VPN 与成绩监控已停止。", ServicePhase.Stopped);
         }
@@ -220,21 +223,22 @@ public sealed class ProcessSupervisor : IAsyncDisposable
         AddArgument(startInfo, "-socks-bind", settings.SocksBind);
         if (!string.IsNullOrWhiteSpace(settings.ResolveRule)) AddArgument(startInfo, "-resolve", settings.ResolveRule);
 
-        _vpnProcess = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
-        _vpnProcess.OutputDataReceived += (_, args) => HandleVpnOutput(args.Data);
-        _vpnProcess.ErrorDataReceived += (_, args) => HandleVpnOutput(args.Data);
-        if (!_vpnProcess.Start()) throw new InvalidOperationException("EasierConnect 启动失败。");
-        _vpnProcess.BeginOutputReadLine();
-        _vpnProcess.BeginErrorReadLine();
-        WriteLog("VPN", "正在建立新会话。", ServicePhase.Starting);
-
-        var deadline = DateTimeOffset.Now.AddSeconds(60);
+        var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
+        process.OutputDataReceived += (_, args) => HandleVpnOutput(process, args.Data);
+        process.ErrorDataReceived += (_, args) => HandleVpnOutput(process, args.Data);
+        _vpnProcess = process;
         try
         {
+            if (!process.Start()) throw new InvalidOperationException("EasierConnect 启动失败。");
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+            WriteLog("VPN", "正在建立新会话。", ServicePhase.Starting);
+
+            var deadline = DateTimeOffset.Now.AddSeconds(60);
             while (DateTimeOffset.Now < deadline)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (_vpnProcess.HasExited) throw new InvalidOperationException($"EasierConnect 已退出，代码 {_vpnProcess.ExitCode}。");
+                if (process.HasExited) throw new InvalidOperationException($"EasierConnect 已退出，代码 {process.ExitCode}。");
                 if (readySignal.Task.IsCompletedSuccessfully)
                 {
                     _vpnConnectedAt = DateTimeOffset.Now;
@@ -246,6 +250,13 @@ public sealed class ProcessSupervisor : IAsyncDisposable
             }
             throw new TimeoutException("等待 VPN SOCKS5 服务启动超时。");
         }
+        catch
+        {
+            await StopProcessAsync(process);
+            if (ReferenceEquals(process, _vpnProcess)) DisposeProcess(ref _vpnProcess);
+            else process.Dispose();
+            throw;
+        }
         finally
         {
             if (ReferenceEquals(_vpnReadySignal, readySignal)) _vpnReadySignal = null;
@@ -255,15 +266,26 @@ public sealed class ProcessSupervisor : IAsyncDisposable
     private async Task StartMonitorAsync(CancellationToken cancellationToken)
     {
         var startInfo = CreateMonitorStartInfo(_settings!);
-        _monitorProcess = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
-        _monitorProcess.OutputDataReceived += (_, args) => HandleMonitorOutput(args.Data, false);
-        _monitorProcess.ErrorDataReceived += (_, args) => HandleMonitorOutput(args.Data, true);
-        if (!_monitorProcess.Start()) throw new InvalidOperationException("成绩监控启动失败。");
-        _monitorProcess.BeginOutputReadLine();
-        _monitorProcess.BeginErrorReadLine();
-        UpdateStatus(Status.VpnPhase, Status.VpnText, ServicePhase.Starting, "正在打开 Edge");
-        WriteLog("监控", "成绩监控已启动，正在打开独立 Edge。", ServicePhase.Starting);
-        await Task.Delay(200, cancellationToken);
+        var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
+        process.OutputDataReceived += (_, args) => HandleMonitorOutput(process, args.Data, false);
+        process.ErrorDataReceived += (_, args) => HandleMonitorOutput(process, args.Data, true);
+        _monitorProcess = process;
+        try
+        {
+            if (!process.Start()) throw new InvalidOperationException("成绩监控启动失败。");
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+            UpdateStatus(Status.VpnPhase, Status.VpnText, ServicePhase.Starting, "正在打开 Edge");
+            WriteLog("监控", "成绩监控已启动，正在打开独立 Edge。", ServicePhase.Starting);
+            await Task.Delay(200, cancellationToken);
+        }
+        catch
+        {
+            await StopProcessAsync(process);
+            if (ReferenceEquals(process, _monitorProcess)) DisposeProcess(ref _monitorProcess);
+            else process.Dispose();
+            throw;
+        }
     }
 
     private ProcessStartInfo CreateMonitorStartInfo(AppSettings settings)
@@ -293,6 +315,11 @@ public sealed class ProcessSupervisor : IAsyncDisposable
         {
             try
             {
+                if (!_lastResourceSampleAt.HasValue || DateTimeOffset.Now >= _lastResourceSampleAt.Value.AddMinutes(10))
+                {
+                    RecordResourceTelemetry("periodic");
+                }
+
                 if (_vpnProcess is null || _vpnProcess.HasExited)
                 {
                     await RestartVpnAsync("VPN 进程已退出", cancellationToken);
@@ -337,16 +364,20 @@ public sealed class ProcessSupervisor : IAsyncDisposable
     {
         WriteLog("VPN", $"正在重连：{reason}。成绩监控保持运行。", ServicePhase.Degraded);
         UpdateStatus(ServicePhase.Starting, "正在重连", Status.MonitorPhase, Status.MonitorText);
+        RecordResourceTelemetry("vpn_before_restart");
         await StopProcessAsync(_vpnProcess);
         DisposeProcess(ref _vpnProcess);
+        _vpnConnectedAt = null;
         await Task.Delay(1000, cancellationToken);
+        await EnsureSocksPortAvailableAsync(_settings!, cancellationToken);
         await StartVpnAsync(cancellationToken);
+        RecordResourceTelemetry("vpn_after_restart");
         WriteLog("VPN", "VPN 重连完成。", ServicePhase.Running);
     }
 
-    private void HandleVpnOutput(string? line)
+    private void HandleVpnOutput(Process source, string? line)
     {
-        if (string.IsNullOrWhiteSpace(line) || _stopping) return;
+        if (!ReferenceEquals(source, _vpnProcess) || string.IsNullOrWhiteSpace(line) || _stopping) return;
         if (line.Contains("SOCKS5 SERVER listening on", StringComparison.OrdinalIgnoreCase))
         {
             _vpnReadySignal?.TrySetResult(true);
@@ -375,9 +406,9 @@ public sealed class ProcessSupervisor : IAsyncDisposable
         if (sanitized is not null) WriteLog("VPN", sanitized, line.Contains("EOF") ? ServicePhase.Degraded : ServicePhase.Running);
     }
 
-    private void HandleMonitorOutput(string? line, bool isError)
+    private void HandleMonitorOutput(Process source, string? line, bool isError)
     {
-        if (string.IsNullOrWhiteSpace(line) || _stopping) return;
+        if (!ReferenceEquals(source, _monitorProcess) || string.IsNullOrWhiteSpace(line) || _stopping) return;
         if (line.StartsWith(GuiEventPrefix, StringComparison.Ordinal))
         {
             HandleMonitorEvent(line[GuiEventPrefix.Length..]);
@@ -547,7 +578,12 @@ public sealed class ProcessSupervisor : IAsyncDisposable
 
     private static void DisposeProcess(ref Process? process)
     {
-        process?.Dispose();
+        if (process is not null)
+        {
+            try { process.CancelOutputRead(); } catch (InvalidOperationException) { }
+            try { process.CancelErrorRead(); } catch (InvalidOperationException) { }
+            process.Dispose();
+        }
         process = null;
     }
 
@@ -616,6 +652,19 @@ public sealed class ProcessSupervisor : IAsyncDisposable
             // Logging must never stop monitoring.
         }
         LogReceived?.Invoke(entry);
+    }
+
+    private void RecordResourceTelemetry(string reason)
+    {
+        try
+        {
+            ResourceTelemetry.Capture(reason);
+            _lastResourceSampleAt = DateTimeOffset.Now;
+        }
+        catch
+        {
+            // Diagnostics must never interfere with VPN or grade monitoring.
+        }
     }
 
     public async ValueTask DisposeAsync()

@@ -12,6 +12,7 @@ Windows GUI integrating the CAU grade monitor with an EasierConnect-compatible S
 - Select course types as the default GPA rule, then include or exclude individual courses as exceptions.
 - Recalculate GPA immediately after changing course selections without restarting the monitor, VPN, or Edge.
 - Minimize to the Windows notification area for long-running operation.
+- Record low-frequency process and system-memory telemetry with bounded retention.
 
 ## Run
 
@@ -24,6 +25,22 @@ Runtime data is stored under:
 ```
 
 Encrypted secrets can only be decrypted by the same Windows user on the same machine. When moving the package to another server, enter the secrets again.
+
+## Windows crash diagnostics
+
+If the ECS reports an operating-system crash or unexpected reboot, run this from an elevated PowerShell 7 prompt after the server is back online:
+
+```powershell
+pwsh -ExecutionPolicy Bypass -File .\collect-crash-diagnostics.ps1
+```
+
+To enable kernel dumps and a system-managed pagefile before the next incident:
+
+```powershell
+pwsh -ExecutionPolicy Bypass -File .\enable-kernel-dump.ps1 -ConfigureSystemManagedPagefile
+```
+
+The collector excludes dump contents, credentials, Feishu secrets, browser data, configuration, grades, and application-log contents. Do not publish `C:\Windows\MEMORY.DMP`; analyze or transfer it privately if the BugCheck event does not identify the faulting driver.
 
 ## Build
 

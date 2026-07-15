@@ -59,6 +59,8 @@ $files = @(
     "start-vpn-and-monitor.ps1",
     "use-njuconnect-config.ps1",
     "create-scheduled-task.ps1",
+    "collect-crash-diagnostics.ps1",
+    "enable-kernel-dump.ps1",
     "cau-njuconnect.pac",
     "一键启动VPN和查询.bat",
     "README.md",
