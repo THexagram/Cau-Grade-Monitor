@@ -268,9 +268,18 @@
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <TextBlock x:Name="GradesSummaryText" Text="等待首次成功查询" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
-                        <TextBlock x:Name="GradesUpdatedText" Grid.Column="1" Text="--" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center" />
+                        <Button x:Name="RefreshGpaButton" Grid.Column="1" Style="{StaticResource PrimaryButton}"
+                                Click="RefreshGpa_Click" IsEnabled="False" MinHeight="30" Padding="11,5" Margin="0,0,12,0"
+                                ToolTip="保存当前选择并立即重新计算绩点，无需重启监控">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock FontFamily="Segoe Fluent Icons" Text="&#xE72C;" Foreground="White" FontSize="14" Margin="0,0,7,0" />
+                                <TextBlock Text="刷新绩点" Foreground="White" />
+                            </StackPanel>
+                        </Button>
+                        <TextBlock x:Name="GradesUpdatedText" Grid.Column="2" Text="--" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center" />
                     </Grid>
 
                     <Border Grid.Row="1" Background="White" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="6">

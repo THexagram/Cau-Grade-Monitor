@@ -127,7 +127,39 @@ function addUnique(target, items) {
   return target;
 }
 
+function normalizeGpaConfig(value = {}) {
+  const gpa = { ...value };
+  if (!['required', 'required_and_sports', 'all'].includes(gpa.scope)) {
+    gpa.scope = 'required_and_sports';
+  }
+  gpa.useSelectedTypes = gpa.useSelectedTypes === true;
+  gpa.selectedTypes = Array.isArray(gpa.selectedTypes)
+    ? [...new Set(gpa.selectedTypes.map(normalize).filter(Boolean))]
+    : [];
+  gpa.includedCourseKeys = Array.isArray(gpa.includedCourseKeys)
+    ? [...new Set(gpa.includedCourseKeys.map((key) => String(key || '').trim()).filter(Boolean))]
+    : [];
+  gpa.excludedCourseKeys = Array.isArray(gpa.excludedCourseKeys)
+    ? [...new Set(gpa.excludedCourseKeys.map((key) => String(key || '').trim()).filter(Boolean))]
+    : [];
+  return gpa;
+}
+
+function reloadGpaConfigIfChanged(config) {
+  if (!config?._configPath) return false;
+  const modifiedAt = fs.statSync(config._configPath).mtimeMs;
+  if (modifiedAt === config._gpaConfigMtimeMs) return false;
+
+  const latest = readJson(config._configPath);
+  const nextGpa = normalizeGpaConfig(latest.gpa);
+  const changed = JSON.stringify(nextGpa) !== JSON.stringify(config.gpa);
+  config.gpa = nextGpa;
+  config._gpaConfigMtimeMs = modifiedAt;
+  return changed;
+}
+
 function loadConfig(configPath) {
+  configPath = path.resolve(configPath);
   loadEnvFile(path.join(path.dirname(configPath), '.env'));
   if (!fs.existsSync(configPath)) {
     const example = path.join(path.dirname(configPath), 'config.example.json');
@@ -151,20 +183,9 @@ function loadConfig(configPath) {
   config.logging = config.logging || {};
   config.logging.noChangeEverySeconds = positiveNumber(config.logging.noChangeEverySeconds, 1800);
   config.logging.loginNeededEverySeconds = positiveNumber(config.logging.loginNeededEverySeconds, 300);
-  config.gpa = config.gpa || {};
-  if (!['required', 'required_and_sports', 'all'].includes(config.gpa.scope)) {
-    config.gpa.scope = 'required_and_sports';
-  }
-  config.gpa.useSelectedTypes = config.gpa.useSelectedTypes === true;
-  config.gpa.selectedTypes = Array.isArray(config.gpa.selectedTypes)
-    ? [...new Set(config.gpa.selectedTypes.map(normalize).filter(Boolean))]
-    : [];
-  config.gpa.includedCourseKeys = Array.isArray(config.gpa.includedCourseKeys)
-    ? [...new Set(config.gpa.includedCourseKeys.map((key) => String(key || '').trim()).filter(Boolean))]
-    : [];
-  config.gpa.excludedCourseKeys = Array.isArray(config.gpa.excludedCourseKeys)
-    ? [...new Set(config.gpa.excludedCourseKeys.map((key) => String(key || '').trim()).filter(Boolean))]
-    : [];
+  config.gpa = normalizeGpaConfig(config.gpa);
+  config._configPath = configPath;
+  config._gpaConfigMtimeMs = fs.statSync(configPath).mtimeMs;
   config.stateFile = resolvePathMaybe(base, config.stateFile || 'state.json');
   config.guiSnapshotFile = resolvePathMaybe(base, config.guiSnapshotFile || 'gui-snapshot.json');
   config.browser = config.browser || {};
@@ -873,6 +894,12 @@ async function runMonitor(config, options) {
       }
       await closeExtraPages(context, page, config);
 
+      try {
+        if (reloadGpaConfigIfChanged(config)) log('GPA rules reloaded without restarting the monitor.');
+      } catch (error) {
+        log(`GPA rule reload postponed: ${error.message}`);
+      }
+
       const selectedTypes = config.gpa.useSelectedTypes ? config.gpa.selectedTypes : null;
       const courseOverrides = {
         included: config.gpa.includedCourseKeys,
@@ -1014,5 +1041,5 @@ if (require.main === module) {
     process.exitCode = 1;
   });
 } else {
-  module.exports = { buildGuiCourses, calculateRequiredGpa, courseTypeForRow, isIncludedGpaRow, loadConfig, writeJsonAtomic };
+  module.exports = { buildGuiCourses, calculateRequiredGpa, courseTypeForRow, isIncludedGpaRow, loadConfig, reloadGpaConfigIfChanged, writeJsonAtomic };
 }

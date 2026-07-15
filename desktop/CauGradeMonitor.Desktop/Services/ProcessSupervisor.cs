@@ -131,6 +131,14 @@ public sealed class ProcessSupervisor : IAsyncDisposable
         WriteLog("飞书", "测试消息发送成功。", ServicePhase.Running);
     }
 
+    public void ApplyGpaSettings(AppSettings settings)
+    {
+        ValidateMonitorRuntime();
+        MonitorConfigWriter.Write(settings, _monitorRoot!);
+        _settings = settings;
+        WriteLog("监控", "绩点规则已更新，监控进程将在下次查询时热加载。", ServicePhase.Running);
+    }
+
     private void ValidateAndResolveRuntime(AppSettings settings)
     {
         if (string.IsNullOrWhiteSpace(settings.VpnUsername)) throw new InvalidOperationException("请填写 VPN 用户名。");

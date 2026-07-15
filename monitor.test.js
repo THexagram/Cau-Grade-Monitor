@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { buildGuiCourses, calculateRequiredGpa, isIncludedGpaRow, loadConfig, writeJsonAtomic } = require('./monitor');
+const { buildGuiCourses, calculateRequiredGpa, isIncludedGpaRow, loadConfig, reloadGpaConfigIfChanged, writeJsonAtomic } = require('./monitor');
 
 test('includes required and sports courses in the weighted GPA', () => {
   const result = calculateRequiredGpa([
@@ -119,6 +119,41 @@ test('loads and normalizes the saved multi-select type rule', () => {
     assert.deepEqual(config.gpa.selectedTypes, ['体育类', '限选']);
     assert.deepEqual(config.gpa.includedCourseKeys, ['course-a']);
     assert.deepEqual(config.gpa.excludedCourseKeys, ['course-b']);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('hot reloads changed GPA rules without replacing the running config', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'cau-grade-hot-reload-'));
+  const configFile = path.join(directory, 'config.json');
+  try {
+    fs.writeFileSync(configFile, JSON.stringify({
+      gpa: { scope: 'required_and_sports', useSelectedTypes: false },
+      browser: {},
+      proxy: {},
+      feishu: {}
+    }), 'utf8');
+    const config = loadConfig(configFile);
+
+    fs.writeFileSync(configFile, JSON.stringify({
+      gpa: {
+        scope: 'required_and_sports',
+        useSelectedTypes: true,
+        selectedTypes: ['限选'],
+        includedCourseKeys: ['course-a'],
+        excludedCourseKeys: ['course-b']
+      }
+    }), 'utf8');
+    const future = new Date(Date.now() + 2000);
+    fs.utimesSync(configFile, future, future);
+
+    assert.equal(reloadGpaConfigIfChanged(config), true);
+    assert.equal(config.gpa.useSelectedTypes, true);
+    assert.deepEqual(config.gpa.selectedTypes, ['限选']);
+    assert.deepEqual(config.gpa.includedCourseKeys, ['course-a']);
+    assert.deepEqual(config.gpa.excludedCourseKeys, ['course-b']);
+    assert.equal(reloadGpaConfigIfChanged(config), false);
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }

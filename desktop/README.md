@@ -10,6 +10,7 @@ Windows GUI integrating the CAU grade monitor with an EasierConnect-compatible S
 - Store the VPN password, Feishu webhook, and signing secret with Windows DPAPI for the current user.
 - Display current grade count, required and sports-course weighted GPA, service state, and recent logs.
 - Select course types as the default GPA rule, then include or exclude individual courses as exceptions.
+- Recalculate GPA immediately after changing course selections without restarting the monitor, VPN, or Edge.
 - Minimize to the Windows notification area for long-running operation.
 
 ## Run

@@ -83,6 +83,8 @@ public static class MonitorConfigWriter
         };
 
         var options = new JsonSerializerOptions { WriteIndented = true };
-        File.WriteAllText(AppPaths.MonitorConfigFile, JsonSerializer.Serialize(config, options));
+        var temporaryFile = AppPaths.MonitorConfigFile + ".tmp";
+        File.WriteAllText(temporaryFile, JsonSerializer.Serialize(config, options));
+        File.Move(temporaryFile, AppPaths.MonitorConfigFile, true);
     }
 }

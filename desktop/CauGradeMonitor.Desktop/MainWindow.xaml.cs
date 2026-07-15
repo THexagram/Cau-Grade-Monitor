@@ -1,6 +1,8 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -21,6 +23,7 @@ public partial class MainWindow : Window
     private readonly HashSet<string> _includedCourseKeys = new(StringComparer.Ordinal);
     private readonly HashSet<string> _excludedCourseKeys = new(StringComparer.Ordinal);
     private List<GradeCourse> _latestCourses = [];
+    private GradeSnapshot? _latestSnapshot;
     private AppSettings _settings = new();
     private Forms.NotifyIcon? _trayIcon;
     private bool _allowClose;
@@ -184,6 +187,7 @@ public partial class MainWindow : Window
         _busy = busy;
         StartButton.IsEnabled = !busy && !_supervisor.IsRunning;
         StopButton.IsEnabled = !busy && _supervisor.IsRunning;
+        RefreshGpaButton.IsEnabled = !busy && _latestCourses.Count > 0;
         if (!string.IsNullOrWhiteSpace(message)) ActionStatusText.Text = message;
     }
 
@@ -446,13 +450,10 @@ public partial class MainWindow : Window
     {
         try
         {
-            _settings.GpaSelectedTypesConfigured = _gpaTypesConfigured;
-            _settings.GpaSelectedTypes = _selectedGpaTypes.Order(StringComparer.Ordinal).ToList();
-            _settings.GpaIncludedCourseKeys = _includedCourseKeys.Order(StringComparer.Ordinal).ToList();
-            _settings.GpaExcludedCourseKeys = _excludedCourseKeys.Order(StringComparer.Ordinal).ToList();
+            UpdateGpaSettingsModel();
             _settingsStore.Save(_settings);
             var message = _supervisor.IsRunning
-                ? "课程例外已保存；停止并重新启动后用于计算与通知。"
+                ? "课程选择已保存；点击“刷新绩点”立即应用。"
                 : "课程例外已保存，下次启动时生效。";
             ActionStatusText.Text = message;
             SettingsStatusText.Text = message;
@@ -461,6 +462,129 @@ public partial class MainWindow : Window
         {
             MessageBox.Show(this, error.Message, "无法保存绩点规则", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
+    }
+
+    private void UpdateGpaSettingsModel()
+    {
+        _settings.GpaSelectedTypesConfigured = _gpaTypesConfigured;
+        _settings.GpaSelectedTypes = _selectedGpaTypes.Order(StringComparer.Ordinal).ToList();
+        _settings.GpaIncludedCourseKeys = _includedCourseKeys.Order(StringComparer.Ordinal).ToList();
+        _settings.GpaExcludedCourseKeys = _excludedCourseKeys.Order(StringComparer.Ordinal).ToList();
+    }
+
+    private void RefreshGpa_Click(object sender, RoutedEventArgs e)
+    {
+        if (_latestCourses.Count == 0) return;
+
+        try
+        {
+            UpdateGpaSettingsModel();
+            _settingsStore.Save(_settings);
+            if (_supervisor.IsRunning) _supervisor.ApplyGpaSettings(_settings);
+
+            var effectiveCourses = _latestCourses
+                .Select(course => course with { IncludedInGpa = IsEffectivelyIncluded(course) })
+                .ToList();
+            var (formattedGpa, counted, credits) = CalculateDisplayedGpa(effectiveCourses);
+            var scope = _gpaTypesConfigured ? "selected_types" : _latestSnapshot?.GpaScope ?? _settings.GpaScope;
+            var selectedTypes = _gpaTypesConfigured
+                ? _selectedGpaTypes.Order(StringComparer.Ordinal).ToList()
+                : _latestSnapshot?.SelectedTypes;
+            var checkedAt = _latestSnapshot?.CheckedAt ?? DateTimeOffset.Now;
+            var updatedSnapshot = new GradeSnapshot(
+                _latestSnapshot?.Rows ?? effectiveCourses.Count,
+                formattedGpa,
+                counted,
+                counted,
+                credits,
+                "本地绩点刷新",
+                checkedAt,
+                effectiveCourses,
+                scope,
+                selectedTypes);
+
+            _latestCourses = effectiveCourses;
+            _latestSnapshot = updatedSnapshot;
+            SnapshotStore.Save(updatedSnapshot);
+            RefreshGradesGrid();
+
+            var scopeLabel = scope == "selected_types" ? SelectedTypesLabel(selectedTypes) : GpaScopeLabel(scope);
+            GpaMetricText.Text = formattedGpa;
+            GpaScopeMetricLabel.Text = scopeLabel;
+            RequiredMetricText.Text = $"{counted}/{counted}";
+            CreditsMetricText.Text = $"{credits:0.##} 学分";
+            SourceMetricText.Text = "来源：本地绩点刷新";
+            GradesSummaryText.Text = $"共 {updatedSnapshot.Rows} 科 | 计入绩点 {counted} 科 | {credits:0.##} 学分";
+            GradesUpdatedText.Text = $"{scopeLabel} | 刷新于 {DateTime.Now:HH:mm:ss}";
+            var message = _supervisor.IsRunning
+                ? "绩点已刷新；后续查询和飞书通知将使用当前规则。"
+                : "绩点已刷新并保存，下次启动监控时自动应用。";
+            ActionStatusText.Text = message;
+            SettingsStatusText.Text = message;
+        }
+        catch (Exception error)
+        {
+            MessageBox.Show(this, error.Message, "无法刷新绩点", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private static (string FormattedGpa, int Counted, double Credits) CalculateDisplayedGpa(IEnumerable<GradeCourse> courses)
+    {
+        var weightedPoints = 0d;
+        var totalCredits = 0d;
+        var counted = 0;
+        foreach (var course in courses.Where(course => course.IncludedInGpa))
+        {
+            if (!TryParseCredit(course.Credit, out var credit) || GradePointForScore(course.Score) is not { } gradePoint) continue;
+            weightedPoints += gradePoint * credit;
+            totalCredits += credit;
+            counted += 1;
+        }
+
+        var formatted = totalCredits > 0
+            ? (weightedPoints / totalCredits).ToString("0.00", CultureInfo.InvariantCulture)
+            : "暂无可计算绩点";
+        return (formatted, counted, totalCredits);
+    }
+
+    private static bool TryParseCredit(string value, out double credit)
+    {
+        credit = 0;
+        var match = Regex.Match(ToHalfWidth(value), @"\d+(?:\.\d+)?");
+        return match.Success && double.TryParse(match.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out credit);
+    }
+
+    private static double? GradePointForScore(string score)
+    {
+        var normalized = new string(ToHalfWidth(score)
+            .Where(character => !char.IsWhiteSpace(character))
+            .ToArray())
+            .ToUpperInvariant();
+        return normalized switch
+        {
+            "A+" => 4.0,
+            "A" => 4.0,
+            "A-" => 3.7,
+            "B+" => 3.3,
+            "B" => 3.0,
+            "B-" => 2.7,
+            "C+" => 2.3,
+            "C" => 2.0,
+            "D+" => 1.5,
+            "D" => 1.0,
+            "F" => 0,
+            _ => null
+        };
+    }
+
+    private static string ToHalfWidth(string value)
+    {
+        return new string(value.Select(character => character switch
+        {
+            >= '\uFF01' and <= '\uFF5E' => (char)(character - 0xFEE0),
+            '\u3000' => ' ',
+            _ => character
+        }).ToArray());
     }
 
     private void UpdateGpaTypesSummary()
@@ -553,6 +677,7 @@ public partial class MainWindow : Window
     private void RenderSnapshot(GradeSnapshot snapshot)
     {
         var courses = snapshot.Courses ?? [];
+        _latestSnapshot = snapshot;
         _latestCourses = courses.ToList();
         UpdateAvailableGpaTypes(courses, snapshot);
         CoursesMetricText.Text = snapshot.Rows.ToString();
@@ -563,6 +688,7 @@ public partial class MainWindow : Window
         LastCheckMetricText.Text = snapshot.CheckedAt.ToString("HH:mm");
         SourceMetricText.Text = string.IsNullOrWhiteSpace(snapshot.Source) ? "查询完成" : $"来源：{snapshot.Source}";
         RefreshGradesGrid();
+        RefreshGpaButton.IsEnabled = !_busy && courses.Count > 0;
         GradesSummaryText.Text = courses.Count > 0
             ? $"共 {snapshot.Rows} 科 | 计入绩点 {snapshot.CountedRequired} 科 | {snapshot.Credits:0.##} 学分"
             : "当前缓存没有课程明细，成功查询后会自动显示";
